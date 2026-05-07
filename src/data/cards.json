@@ -1,0 +1,8 @@
+﻿[
+  { "id": "LSEORAC", "name": "Оракул", "rarity": "legendary", "type": "event", "collection": "Egypt", "text": "Посмотри 3 верхние карты колоды. Возьми 1." },
+  { "id": "MCHANUB", "name": "Анубис", "rarity": "mythic", "type": "character", "collection": "Egypt", "text": "Страж. События противника стоят +1." },
+  { "id": "ESEKADU", "name": "Кадуцей", "rarity": "epic", "type": "event", "collection": "Egypt", "text": "Сними негативный эффект. Получи +1 ресурс." },
+  { "id": "RCHSOBE", "name": "Собек", "rarity": "rare", "type": "character", "collection": "Egypt", "text": "При входе нанеси 2 урона случайному врагу." },
+  { "id": "UCHEHRA", "name": "Храм", "rarity": "uncommon", "type": "tactic", "collection": "Egypt", "text": "Следующий персонаж стоит -1." },
+  { "id": "CSEPEST", "name": "Песчаная Буря", "rarity": "common", "type": "effect", "collection": "Egypt", "text": "Все персонажи получают -1 к силе до конца хода." }
+]
