@@ -144,7 +144,7 @@ export default function Inventory() {
                     onPointerMove={onCardPointerMove}
                     onPointerLeave={resetCardTilt}
                     onPointerCancel={resetCardTilt}
-                    style={{ ["--card-mask" as any]: `url("${c.frontSrc}")` } as CSSProperties}
+                    style={{ "--card-mask": `url("${c.frontSrc}")` } as CSSProperties & Record<"--card-mask", string>}
                   >
                     <div className="invCardGlow" aria-hidden="true" />
                     <img className="invCardImg" src={c.frontSrc} alt={c.title} />
