@@ -1,7 +1,11 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Collection from "./screens/Collection";
 import DeckBuilder from "./screens/DeckBuilder";
+
 import Hub from "./screens/Hub/Hub";
+
+import Hub from "./screens/Hub";
+
 import MatchLauncher from "./screens/MatchLauncher";
 import MatchScreen from "./screens/Match/MatchScreen";
 import Profile from "./screens/Profile";
