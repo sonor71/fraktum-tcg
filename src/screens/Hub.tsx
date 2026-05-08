@@ -1,3 +1,6 @@
+
+export { default } from "./Hub/Hub";
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -55,3 +58,4 @@ export default function Hub() {
     </section>
   );
 }
+
