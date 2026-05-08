@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGameStore } from "../useGameStore";
 
@@ -163,7 +163,7 @@ function Card3D({
       type="button"
       className={`poCard ${flipped ? "isFlipped" : ""}`}
       onClick={onFlip}
-      style={{ ["--i" as any]: index }}
+      style={{ "--i": index } as React.CSSProperties & Record<"--i", number>}
       aria-label={flipped ? `Карта: ${card.name}` : "Открыть карту"}
       title={flipped ? card.name : "Нажми, чтобы открыть"}
     >
@@ -194,7 +194,7 @@ export default function PackOpen() {
   const grantCards = useGameStore((s) => s.grantCards);
 
   const [packKey, setPackKey] = useState(0);
-  const cards = useMemo(() => pickRandomPack(5), [packKey]);
+  const [cards, setCards] = useState(() => pickRandomPack(5));
 
   const [flipped, setFlipped] = useState<boolean[]>(() => Array(5).fill(false));
 
@@ -214,13 +214,13 @@ export default function PackOpen() {
   frontSrc: one.frontSrc,
   rarity: one.rarity,
   type: one.type,
-  obtainedAt: Date.now(),
 }]);
 }
 
 
   function resetPack() {
     setPackKey((v) => v + 1);
+    setCards(pickRandomPack(5));
     setFlipped(Array(5).fill(false));
     grantedRef.current = new Set(); // новый пак — новая выдача
   }
