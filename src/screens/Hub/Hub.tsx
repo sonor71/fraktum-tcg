@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PlayerSprite from "./PlayerSprite";
 import "./hub.css";
 import { HUB_MAPS, type HubExit, type HubMapId, type HubPoint } from "./hubMaps";
-import { useHubMovement } from "./useHubMovement";
+import { getPlayerCollisionRect, useHubMovement } from "./useHubMovement";
 
 const TRANSITION_MS = 420;
 
@@ -34,6 +34,8 @@ export default function Hub() {
   const nearbyExit = useMemo(() => {
     return currentMap.exits.find((exit) => distance(position, exit) <= exit.radius);
   }, [currentMap.exits, position]);
+
+  const playerCollisionRect = useMemo(() => getPlayerCollisionRect(position), [position]);
 
   const enterMap = useCallback((targetMap: HubMapId, point: HubPoint) => {
     setIsTransitioning(true);
@@ -151,6 +153,34 @@ export default function Hub() {
               </button>
             );
           })}
+          {debugMode
+            ? currentMap.colliders?.map((collider) => (
+                <div
+                  key={collider.id}
+                  className="hubColliderDebug"
+                  style={{
+                    left: collider.x,
+                    top: collider.y,
+                    width: collider.width,
+                    height: collider.height,
+                  }}
+                >
+                  <span className="hubColliderDebugLabel">{collider.id}</span>
+                </div>
+              ))
+            : null}
+
+          {debugMode ? (
+            <div
+              className="hubPlayerCollisionDebug"
+              style={{
+                left: playerCollisionRect.x,
+                top: playerCollisionRect.y,
+                width: playerCollisionRect.width,
+                height: playerCollisionRect.height,
+              }}
+            />
+          ) : null}
 
           <div
             className="hubPlayerAnchor"
