@@ -1,0 +1,403 @@
+.hubWorld {
+  position: fixed;
+  inset: var(--topbar-h) calc(var(--rail-w) + 22px) 0 0;
+  overflow: hidden;
+  border-radius: 0 0 32px 0;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(93, 58, 202, 0.22), transparent 42%),
+    linear-gradient(135deg, #02050d, #070f1f 48%, #140824);
+  isolation: isolate;
+}
+
+.hubViewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+.hubMapLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.hubMapImage,
+.hubMapFallback {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.hubMapImage {
+  object-fit: fill;
+  z-index: 1;
+  filter: saturate(1.08) contrast(1.04) brightness(0.88);
+}
+
+.hubMapFallback {
+  z-index: 0;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  text-align: center;
+  color: rgba(238, 249, 255, 0.76);
+  background:
+    radial-gradient(circle at 50% 44%, rgba(0, 221, 255, 0.16), transparent 24%),
+    linear-gradient(135deg, rgba(12, 24, 48, 0.92), rgba(31, 13, 55, 0.9));
+}
+
+.hubMapFallback strong {
+  font-size: 48px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hubMapFallback span {
+  color: rgba(238, 249, 255, 0.6);
+}
+
+.hubWorldTopOverlay,
+.hubBottomPrompt,
+.hubDebugPanel {
+  position: absolute;
+  z-index: 80;
+  border: 1px solid rgba(159, 229, 255, 0.2);
+  background: linear-gradient(145deg, rgba(4, 9, 18, 0.72), rgba(35, 18, 62, 0.48));
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px);
+}
+
+.hubWorldTopOverlay {
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px;
+  border-radius: 24px;
+}
+
+.hubZoneTitle {
+  display: grid;
+  gap: 2px;
+  min-width: 210px;
+}
+
+.hubZoneTitle span,
+.hubBottomPrompt span,
+.hubDebugPanel span {
+  color: rgba(204, 237, 255, 0.68);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hubZoneTitle strong {
+  color: #f6fbff;
+  font-size: 24px;
+  line-height: 1;
+  text-shadow: 0 0 18px rgba(95, 224, 255, 0.28);
+}
+
+.hubZoneTitle small {
+  color: #ffe6a4;
+  font-weight: 800;
+}
+
+.hubQuickNav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hubQuickNav button,
+.hubExitZone {
+  color: #effbff;
+  border: 1px solid rgba(137, 228, 255, 0.24);
+  background: linear-gradient(180deg, rgba(80, 43, 145, 0.42), rgba(3, 10, 20, 0.8));
+  box-shadow: 0 0 24px rgba(0, 221, 255, 0.08);
+}
+
+.hubQuickNav button {
+  min-height: 38px;
+  border-radius: 14px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.hubQuickNav button:hover,
+.hubExitZone.is-active {
+  border-color: rgba(255, 218, 128, 0.64);
+  box-shadow: 0 0 30px rgba(255, 206, 99, 0.22), 0 0 70px rgba(123, 93, 255, 0.15);
+}
+
+.hubExitZone {
+  position: absolute;
+  z-index: 12;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  opacity: 0.18;
+  transition: opacity 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+
+.hubExitZone span {
+  opacity: 0;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #ffe8a9;
+}
+
+.hubExitZone.is-active {
+  opacity: 0.92;
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.hubExitZone.is-active span,
+.hubWorld.is-debug .hubExitZone span {
+  opacity: 1;
+}
+
+.hubWorld:not(.is-debug) .hubExitZone:not(.is-active) {
+  border-color: transparent;
+  background: radial-gradient(circle, rgba(91, 229, 255, 0.12), transparent 62%);
+  box-shadow: none;
+}
+
+.hubWorld.is-debug .hubExitZone {
+  opacity: 0.76;
+  border-style: dashed;
+  background: radial-gradient(circle, rgba(0, 221, 255, 0.2), rgba(103, 68, 203, 0.08) 62%, transparent 64%);
+}
+
+.hubPlayerAnchor {
+  position: absolute;
+  z-index: 35;
+  width: 1px;
+  height: 1px;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+}
+
+.hubPlayerSprite {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 86px;
+  height: 112px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.hubPlayerSprite.is-moving {
+  animation: hubWalkBob 420ms ease-in-out infinite;
+}
+
+.hubPlayerSprite.is-idle {
+  animation: hubIdleFloat 2200ms ease-in-out infinite;
+}
+
+.hubPlayerShadow {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  width: 58px;
+  height: 16px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.56), transparent 70%);
+  filter: blur(1px);
+}
+
+.hubPlayerImage,
+.hubPlayerSheet,
+.hubPlayerFallback {
+  position: absolute;
+  inset: 0;
+}
+
+.hubPlayerImage {
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 16px rgba(87, 229, 255, 0.28)) drop-shadow(0 16px 22px rgba(0, 0, 0, 0.6));
+}
+
+.hubPlayerFallback {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+}
+
+.hubPlayerFallback span {
+  width: 42px;
+  height: 74px;
+  border-radius: 26px 26px 16px 16px;
+  background:
+    radial-gradient(circle at 50% 18%, #f8fdff 0 13%, transparent 14%),
+    linear-gradient(180deg, #8ff3ff, #725cff 54%, #201142);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 26px rgba(92, 230, 255, 0.6), 0 0 60px rgba(132, 86, 255, 0.32);
+}
+
+.hubPlayerSheet {
+  z-index: 2;
+  width: 64px;
+  height: 96px;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  background-image: url("/assets/player/player-spritesheet.png");
+  background-repeat: no-repeat;
+  background-size: auto;
+  opacity: 1;
+  background-position: 0 0;
+  filter: drop-shadow(0 0 16px rgba(87, 229, 255, 0.28));
+  /* TODO: tune frameWidth, frameHeight, rows and cols here when the final spritesheet is exported. */
+}
+
+.hubPromptAbove {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 320px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 218, 128, 0.38);
+  color: #fff3c0;
+  background: linear-gradient(145deg, rgba(9, 12, 22, 0.9), rgba(56, 34, 88, 0.74));
+  box-shadow: 0 0 30px rgba(255, 207, 102, 0.18), 0 10px 30px rgba(0, 0, 0, 0.48);
+  font-weight: 900;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.hubBottomPrompt {
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 4px;
+  min-width: min(560px, calc(100% - 36px));
+  padding: 14px 18px;
+  border-radius: 22px;
+  text-align: center;
+}
+
+.hubBottomPrompt strong {
+  color: #fff8dc;
+  letter-spacing: 0.02em;
+}
+
+.hubDebugPanel {
+  left: 18px;
+  bottom: 18px;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  color: #dff8ff;
+}
+
+.hubFade {
+  position: absolute;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+  background: #02030a;
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+.hubFade.is-active {
+  opacity: 1;
+}
+
+.hubPlayerSprite.is-up .hubPlayerSheet { background-position: 0 -96px; }
+.hubPlayerSprite.is-left .hubPlayerSheet { background-position: 0 -192px; }
+.hubPlayerSprite.is-right .hubPlayerSheet { background-position: 0 -288px; }
+
+@keyframes hubWalkBob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-5px); }
+}
+
+@keyframes hubIdleFloat {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-3px); }
+}
+
+@media (max-width: 900px) {
+  .hubWorld {
+    inset: var(--topbar-h) 0 0 0;
+    border-radius: 0;
+  }
+
+  .hubWorldTopOverlay {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hubQuickNav {
+    justify-content: flex-start;
+  }
+}
+
+.hubColliderZone,
+.hubPlayerCollisionBox {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  display: grid;
+  place-items: start;
+  padding: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hubColliderZone {
+  border: 2px solid rgba(255, 70, 82, 0.82);
+  background: rgba(255, 41, 72, 0.22);
+  box-shadow: inset 0 0 24px rgba(255, 64, 88, 0.22), 0 0 26px rgba(255, 64, 88, 0.16);
+  color: #ffd6dc;
+}
+
+.hubPlayerCollisionBox {
+  border: 1px solid rgba(107, 247, 255, 0.86);
+  background: rgba(62, 231, 255, 0.2);
+  box-shadow: 0 0 20px rgba(62, 231, 255, 0.22);
+  color: #d8fbff;
+}
+
+.hubColliderZone span,
+.hubPlayerCollisionBox span {
+  padding: 2px 4px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.54);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+}
+
+.hubWorld.is-debug .hubExitZone {
+  border-color: rgba(255, 218, 128, 0.82);
+  background: radial-gradient(circle, rgba(255, 218, 128, 0.3), rgba(255, 218, 128, 0.12) 62%, transparent 64%);
+  box-shadow: 0 0 28px rgba(255, 218, 128, 0.26);
+}
