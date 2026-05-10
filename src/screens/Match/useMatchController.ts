@@ -3,7 +3,6 @@ import { useGameStore } from "../../useGameStore";
 import { getNextAiAction } from "../../game/match/ai";
 import { matchReducer } from "../../game/match/reducer";
 import { createInitialMatch } from "../../game/match/setup";
-import type { MatchState } from "../../game/match/types";
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => {
@@ -15,12 +14,11 @@ export function useMatchController() {
   const ownedCards = useGameStore((store) => store.ownedCards);
   const deckIds = useGameStore((store) => store.deckIds);
 
-  const initialMatchRef = useRef<MatchState | null>(null);
-  if (!initialMatchRef.current) {
-    initialMatchRef.current = createInitialMatch(ownedCards, deckIds);
-  }
-
-  const [state, dispatch] = useReducer(matchReducer, initialMatchRef.current);
+  const [state, dispatch] = useReducer(
+    matchReducer,
+    null,
+    () => createInitialMatch(ownedCards, deckIds)
+  );
   const [diceValue, setDiceValue] = useState<number | null>(null);
   const [diceRollingOwner, setDiceRollingOwner] = useState<"player" | "ai" | null>(null);
   const stateRef = useRef(state);
@@ -38,8 +36,11 @@ export function useMatchController() {
     handledTurnIntroRef.current = introKey;
 
     let cancelled = false;
-    setDiceRollingOwner(state.activePlayer);
-    setDiceValue(Math.floor(Math.random() * 20) + 1);
+    const warmupTimeout = window.setTimeout(() => {
+      if (cancelled) return;
+      setDiceRollingOwner(state.activePlayer);
+      setDiceValue(Math.floor(Math.random() * 20) + 1);
+    }, 0);
 
     const intervalId = window.setInterval(() => {
       if (cancelled) return;
@@ -61,6 +62,7 @@ export function useMatchController() {
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
+      window.clearTimeout(warmupTimeout);
       window.clearTimeout(settleTimeout);
     };
   }, [state.activePlayer, state.matchId, state.phase, state.round, state.winner]);
