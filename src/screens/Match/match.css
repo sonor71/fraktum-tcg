@@ -1,0 +1,497 @@
+.matchRoot {
+  min-height: 100vh;
+  padding: 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  color: #eef7ff;
+  background:
+    radial-gradient(circle at top left, rgba(0, 215, 255, 0.12), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(87, 152, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.94), rgba(5, 10, 18, 0.88));
+}
+
+.matchMainColumn {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.matchHeaderPanel,
+.matchBoardPanel,
+.matchHandPanel,
+.matchSidePanel,
+.matchLogColumn {
+  border: 1px solid rgba(150, 224, 255, 0.14);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
+  border-radius: 24px;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(12px);
+}
+
+.matchHeaderPanel {
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.matchKicker {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: rgba(188, 232, 255, 0.72);
+  text-transform: uppercase;
+}
+
+.matchTitle {
+  margin: 8px 0 6px;
+  font-size: 30px;
+  line-height: 1;
+}
+
+.matchSubline {
+  color: rgba(235, 245, 255, 0.72);
+  font-size: 14px;
+}
+
+.matchDiceBox {
+  min-width: 320px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.matchDice {
+  width: 112px;
+  height: 112px;
+  border-radius: 26px;
+  display: grid;
+  place-items: center;
+  background:
+    linear-gradient(145deg, rgba(14, 28, 38, 0.95), rgba(2, 10, 18, 0.98));
+  border: 1px solid rgba(151, 224, 255, 0.25);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 0 22px rgba(0, 215, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.matchDice::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.matchDice.isRolling {
+  animation: matchDicePulse 0.18s linear infinite;
+}
+
+@keyframes matchDicePulse {
+  0% {
+    transform: rotate(-3deg) scale(0.98);
+    box-shadow: 0 0 12px rgba(0, 215, 255, 0.14);
+  }
+  50% {
+    transform: rotate(3deg) scale(1.02);
+    box-shadow: 0 0 26px rgba(0, 215, 255, 0.24);
+  }
+  100% {
+    transform: rotate(-2deg) scale(0.99);
+    box-shadow: 0 0 12px rgba(0, 215, 255, 0.14);
+  }
+}
+
+.matchDiceFace {
+  font-size: 42px;
+  font-weight: 800;
+  text-shadow: 0 0 16px rgba(0, 215, 255, 0.32);
+}
+
+.matchDiceLabel {
+  position: absolute;
+  bottom: 12px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: rgba(186, 226, 255, 0.68);
+}
+
+.matchDiceInfo {
+  display: grid;
+  gap: 6px;
+}
+
+.matchDiceOwner {
+  font-size: 13px;
+  color: rgba(193, 231, 255, 0.82);
+}
+
+.matchDiceText {
+  font-size: 15px;
+  line-height: 1.45;
+  max-width: 220px;
+}
+
+.matchBoardPanel {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.matchHeroPanel {
+  width: 100%;
+  border: 1px solid rgba(158, 219, 255, 0.12);
+  background: linear-gradient(180deg, rgba(7, 17, 28, 0.94), rgba(6, 12, 18, 0.9));
+  border-radius: 18px;
+  padding: 14px 16px;
+  color: #eef8ff;
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+
+.matchHeroPanel.isActive {
+  border-color: rgba(92, 205, 255, 0.32);
+  box-shadow: 0 0 22px rgba(0, 215, 255, 0.12);
+}
+
+.matchHeroPanel.isSelectable {
+  cursor: pointer;
+}
+
+.matchHeroTitle {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.matchHeroStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-size: 13px;
+  color: rgba(231, 243, 255, 0.82);
+}
+
+.matchBoardRow {
+  min-height: 154px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.matchUnitCard {
+  border: 1px solid rgba(150, 219, 255, 0.14);
+  background: linear-gradient(180deg, rgba(16, 25, 37, 0.96), rgba(6, 12, 18, 0.9));
+  border-radius: 18px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 110px auto;
+  padding: 0;
+  color: inherit;
+}
+
+.matchUnitCard.isSelected {
+  border-color: rgba(255, 222, 102, 0.6);
+  box-shadow: 0 0 22px rgba(255, 213, 79, 0.18);
+}
+
+.matchUnitCard.isAttackable {
+  cursor: pointer;
+}
+
+.matchUnitArt {
+  width: 100%;
+  height: 110px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.matchUnitInfo {
+  padding: 10px 12px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.matchUnitName,
+.matchCardName {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.matchUnitMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(227, 242, 255, 0.84);
+}
+
+.matchUnitMeta.muted {
+  color: rgba(181, 213, 236, 0.64);
+}
+
+.matchBoardMiddleLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 4px;
+}
+
+.matchBoardHint,
+.matchMiniInfo,
+.matchRuleSub,
+.matchCardText,
+.matchLogEntry,
+.matchEmptyRow {
+  color: rgba(223, 239, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.matchSpecialPanelGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.matchSidePanel,
+.matchHandPanel,
+.matchLogColumn {
+  padding: 18px;
+}
+
+.matchPanelTitle {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.matchRuleBox {
+  display: grid;
+  gap: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(150, 219, 255, 0.1);
+  padding: 14px;
+  background: rgba(4, 10, 16, 0.5);
+}
+
+.matchRuleMain {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.matchSpecialActions,
+.matchPanelTopRow,
+.matchPanelActions,
+.matchOverlayActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.matchActionButton,
+.matchPrimaryButton,
+.matchGhostButton,
+.matchInlineSpecialButton {
+  border-radius: 14px;
+  border: 1px solid rgba(154, 223, 255, 0.14);
+  color: #eef8ff;
+  background: linear-gradient(180deg, rgba(24, 42, 60, 0.95), rgba(10, 18, 28, 0.94));
+  padding: 11px 14px;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.matchActionButton:hover,
+.matchPrimaryButton:hover,
+.matchGhostButton:hover,
+.matchInlineSpecialButton:hover {
+  transform: translateY(-1px);
+  border-color: rgba(92, 205, 255, 0.28);
+  box-shadow: 0 0 18px rgba(0, 215, 255, 0.1);
+}
+
+.matchActionButton:disabled,
+.matchPrimaryButton:disabled,
+.matchGhostButton:disabled,
+.matchInlineSpecialButton:disabled,
+.matchCardButton:disabled,
+.matchHeroPanel:disabled,
+.matchUnitCard:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.matchPrimaryButton {
+  background: linear-gradient(180deg, rgba(24, 76, 112, 0.98), rgba(7, 23, 37, 0.96));
+}
+
+.matchGhostButton {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.matchCardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.matchCardsGrid.compact {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.matchCardSlot {
+  display: grid;
+  gap: 8px;
+}
+
+.matchCardButton {
+  width: 100%;
+  border: 1px solid rgba(150, 219, 255, 0.14);
+  background: linear-gradient(180deg, rgba(15, 28, 42, 0.96), rgba(8, 14, 22, 0.92));
+  border-radius: 18px;
+  overflow: hidden;
+  padding: 0;
+  color: inherit;
+  display: grid;
+  grid-template-rows: 150px auto;
+}
+
+.matchCardArt {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.matchCardOverlay {
+  padding: 10px 12px 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.matchCardTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.matchCardBadge,
+.matchCardCost {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(219, 239, 255, 0.82);
+}
+
+.matchInlineSpecialButton {
+  font-size: 12px;
+  padding: 9px 12px;
+}
+
+.matchEmptyRow {
+  border-radius: 16px;
+  border: 1px dashed rgba(157, 220, 255, 0.14);
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.matchLogColumn {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+}
+
+.matchLogList {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+  display: grid;
+  gap: 10px;
+}
+
+.matchLogEntry {
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(154, 223, 255, 0.08);
+}
+
+.matchOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 8, 14, 0.72);
+  display: grid;
+  place-items: center;
+  z-index: 2000;
+  padding: 24px;
+}
+
+.matchOverlayCard {
+  width: min(520px, 100%);
+  border-radius: 28px;
+  padding: 28px;
+  border: 1px solid rgba(150, 219, 255, 0.16);
+  background: linear-gradient(180deg, rgba(9, 18, 28, 0.98), rgba(4, 9, 16, 0.98));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.5);
+}
+
+.matchOverlayKicker {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  color: rgba(189, 229, 255, 0.72);
+  text-transform: uppercase;
+}
+
+.matchOverlayCard h2 {
+  margin: 10px 0;
+  font-size: 38px;
+}
+
+.matchOverlayCard p {
+  color: rgba(225, 239, 255, 0.78);
+  line-height: 1.5;
+}
+
+@media (max-width: 1320px) {
+  .matchRoot {
+    grid-template-columns: 1fr;
+  }
+
+  .matchLogColumn {
+    max-height: 320px;
+  }
+}
+
+@media (max-width: 920px) {
+  .matchHeaderPanel,
+  .matchBoardMiddleLine,
+  .matchDiceBox,
+  .matchPanelTopRow,
+  .matchPanelActions,
+  .matchSpecialActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .matchDiceBox {
+    min-width: 0;
+  }
+
+  .matchSpecialPanelGrid {
+    grid-template-columns: 1fr;
+  }
+}
