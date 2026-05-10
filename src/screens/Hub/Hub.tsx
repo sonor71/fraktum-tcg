@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PlayerSprite from "./PlayerSprite";
 import "./hub.css";
+
 import { HUB_MAPS, type HubCollider, type HubExit, type HubMapId, type HubPoint } from "./hubMaps";
+import { HUB_MAPS, type HubExit, type HubMapId, type HubPoint } from "./hubMaps";
 import { getPlayerCollisionRect, useHubMovement } from "./useHubMovement";
 
 const TRANSITION_MS = 420;
@@ -93,6 +95,7 @@ export default function Hub() {
   }, [currentMap.exits, position]);
 
   const playerCollisionRect = useMemo(() => getPlayerCollisionRect(position), [position]);
+
   const draftColliderRect = useMemo(() => {
     if (!draftCollider) return null;
     return normalizeColliderRect(draftCollider.start, draftCollider.end);
@@ -111,6 +114,7 @@ export default function Hub() {
       y: Math.min(Math.max(((clientY - rect.top) / rect.height) * mapDimensions.height, 0), mapDimensions.height),
     };
   }, [mapDimensions.height, mapDimensions.width]);
+
 
   const enterMap = useCallback((targetMap: HubMapId, point: HubPoint) => {
     setIsTransitioning(true);
@@ -321,6 +325,7 @@ export default function Hub() {
             );
           })}
           {debugMode
+
             ? currentColliders.map((collider) => {
                 const isSelected = selectedColliderId === collider.id;
                 return (
@@ -354,6 +359,23 @@ export default function Hub() {
               }}
             />
           ) : null}
+
+
+            ? currentMap.colliders?.map((collider) => (
+                <div
+                  key={collider.id}
+                  className="hubColliderDebug"
+                  style={{
+                    left: collider.x,
+                    top: collider.y,
+                    width: collider.width,
+                    height: collider.height,
+                  }}
+                >
+                  <span className="hubColliderDebugLabel">{collider.id}</span>
+                </div>
+              ))
+            : null}
 
           {debugMode ? (
             <div
