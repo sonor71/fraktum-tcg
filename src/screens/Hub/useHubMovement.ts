@@ -23,6 +23,16 @@ type CollisionRect = {
   height: number;
 };
 
+export const PLAYER_COLLISION_WIDTH = 28;
+export const PLAYER_COLLISION_HEIGHT = 16;
+
+type CollisionRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
