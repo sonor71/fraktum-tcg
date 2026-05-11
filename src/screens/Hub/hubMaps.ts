@@ -60,11 +60,7 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     width: 1315,
     height: 1196,
     spawnPoint: { x: 640, y: 493 },
-    colliders: [
-      { id: "hub-fountain-placeholder", x: 570, y: 430, width: 150, height: 88 },
-      { id: "hub-north-planter-placeholder", x: 360, y: 245, width: 210, height: 54 },
-      { id: "hub-east-statue-placeholder", x: 1035, y: 610, width: 92, height: 150 },
-    ],
+    colliders: [],
     exits: [
       {
         id: "to-market",
@@ -108,11 +104,7 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     width: 1728,
     height: 1024,
     spawnPoint: { x: 864, y: 860 },
-    colliders: [
-      { id: "market-left-stall-placeholder", x: 315, y: 445, width: 260, height: 120 },
-      { id: "market-right-stall-placeholder", x: 1145, y: 440, width: 270, height: 130 },
-      { id: "market-center-crates-placeholder", x: 800, y: 585, width: 120, height: 90 },
-    ],
+    colliders: [],
     exits: [
       {
         id: "market-to-hub",
@@ -134,11 +126,7 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     width: 1024,
     height: 1536,
     spawnPoint: { x: 512, y: 1360 },
-    colliders: [
-      { id: "archive-left-shelf-placeholder", x: 120, y: 360, width: 170, height: 650 },
-      { id: "archive-right-shelf-placeholder", x: 735, y: 360, width: 170, height: 650 },
-      { id: "archive-reading-table-placeholder", x: 390, y: 790, width: 245, height: 110 },
-    ],
+    colliders: [],
     exits: [
       {
         id: "archive-to-hub",
@@ -160,11 +148,7 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     width: 1024,
     height: 1536,
     spawnPoint: { x: 512, y: 1360 },
-    colliders: [
-      { id: "arena-left-pillar-placeholder", x: 170, y: 575, width: 120, height: 180 },
-      { id: "arena-right-pillar-placeholder", x: 735, y: 575, width: 120, height: 180 },
-      { id: "arena-center-obstacle-placeholder", x: 430, y: 815, width: 165, height: 105 },
-    ],
+    colliders: [],
     exits: [
       {
         id: "arena-to-hub",

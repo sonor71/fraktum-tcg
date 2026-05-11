@@ -11,7 +11,17 @@ type Size = {
 
 const MOVEMENT_KEYS = new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 
-const CAMERA_ZOOM = 1.5;
+export const HUB_CAMERA_ZOOM = 1.5;
+
+export const PLAYER_COLLISION_WIDTH = 28;
+export const PLAYER_COLLISION_HEIGHT = 16;
+
+type CollisionRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 export const PLAYER_COLLISION_WIDTH = 28;
 export const PLAYER_COLLISION_HEIGHT = 16;
@@ -32,8 +42,8 @@ function getBounds(map: HubMapConfig, dimensions: Size): HubBounds {
 }
 
 function getCameraTarget(player: HubPoint, viewport: Size): Camera {
-  const visibleWidth = viewport.width / CAMERA_ZOOM;
-  const visibleHeight = viewport.height / CAMERA_ZOOM;
+  const visibleWidth = viewport.width / HUB_CAMERA_ZOOM;
+  const visibleHeight = viewport.height / HUB_CAMERA_ZOOM;
 
   return {
     x: player.x - visibleWidth / 2,
@@ -209,7 +219,7 @@ export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint
 
   const mapTransform = useMemo(
     () =>
-      `translate3d(${-camera.x * CAMERA_ZOOM}px, ${-camera.y * CAMERA_ZOOM}px, 0) scale(${CAMERA_ZOOM})`,
+      `translate3d(${-camera.x * HUB_CAMERA_ZOOM}px, ${-camera.y * HUB_CAMERA_ZOOM}px, 0) scale(${HUB_CAMERA_ZOOM})`,
     [camera.x, camera.y]
   );
 

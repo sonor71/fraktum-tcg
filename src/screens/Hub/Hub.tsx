@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PlayerSprite from "./PlayerSprite";
 import "./hub.css";
-
 import { HUB_MAPS, type HubCollider, type HubExit, type HubMapId, type HubPoint } from "./hubMaps";
-import { HUB_MAPS, type HubExit, type HubMapId, type HubPoint } from "./hubMaps";
-import { getPlayerCollisionRect, useHubMovement } from "./useHubMovement";
+import { getPlayerCollisionRect, HUB_CAMERA_ZOOM, useHubMovement } from "./useHubMovement";
 
 const TRANSITION_MS = 420;
 const MIN_COLLIDER_SIZE = 4;
@@ -33,21 +31,21 @@ function normalizeColliderRect(start: HubPoint, end: HubPoint) {
 }
 
 function formatCollidersForExport(colliders: HubCollider[]) {
-  if (colliders.length === 0) return "[]";
+  if (colliders.length === 0) return "colliders: []";
 
   const lines = colliders.map((collider) => {
     return `  { id: ${JSON.stringify(collider.id)}, x: ${Math.round(collider.x)}, y: ${Math.round(collider.y)}, width: ${Math.round(collider.width)}, height: ${Math.round(collider.height)} },`;
   });
 
-  return `[\n${lines.join("\n")}\n]`;
+  return `colliders: [\n${lines.join("\n")}\n]`;
 }
 
 function isTypingTarget(target: EventTarget | null) {
   return target instanceof HTMLElement && Boolean(target.closest("input, textarea, [contenteditable='true']"));
 }
 
-function getNextColliderId(mapId: HubMapId, colliders: HubCollider[]) {
-  const prefix = `${mapId}-wall`;
+function getNextColliderId(colliders: HubCollider[]) {
+  const prefix = "collider";
   let index = colliders.length + 1;
   let id = `${prefix}-${index}`;
 
@@ -95,7 +93,6 @@ export default function Hub() {
   }, [currentMap.exits, position]);
 
   const playerCollisionRect = useMemo(() => getPlayerCollisionRect(position), [position]);
-
   const draftColliderRect = useMemo(() => {
     if (!draftCollider) return null;
     return normalizeColliderRect(draftCollider.start, draftCollider.end);
@@ -109,12 +106,16 @@ export default function Hub() {
     const rect = node.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
 
+    // The rect is the map layer after the current camera translate + HUB_CAMERA_ZOOM scale transform.
+    // Dividing by the rendered scale converts the mouse position back into map/world coordinates.
+    const renderedScaleX = rect.width / mapDimensions.width || HUB_CAMERA_ZOOM;
+    const renderedScaleY = rect.height / mapDimensions.height || HUB_CAMERA_ZOOM;
+
     return {
-      x: Math.min(Math.max(((clientX - rect.left) / rect.width) * mapDimensions.width, 0), mapDimensions.width),
-      y: Math.min(Math.max(((clientY - rect.top) / rect.height) * mapDimensions.height, 0), mapDimensions.height),
+      x: Math.min(Math.max((clientX - rect.left) / renderedScaleX, 0), mapDimensions.width),
+      y: Math.min(Math.max((clientY - rect.top) / renderedScaleY, 0), mapDimensions.height),
     };
   }, [mapDimensions.height, mapDimensions.width]);
-
 
   const enterMap = useCallback((targetMap: HubMapId, point: HubPoint) => {
     setIsTransitioning(true);
@@ -215,7 +216,7 @@ export default function Hub() {
 
     if (rect.width < MIN_COLLIDER_SIZE || rect.height < MIN_COLLIDER_SIZE) return;
 
-    const id = getNextColliderId(currentMapId, currentColliders);
+    const id = getNextColliderId(currentColliders);
     const collider = { id, ...rect };
 
     setMapColliders((collidersByMap) => ({
@@ -325,7 +326,6 @@ export default function Hub() {
             );
           })}
           {debugMode
-
             ? currentColliders.map((collider) => {
                 const isSelected = selectedColliderId === collider.id;
                 return (
@@ -359,23 +359,6 @@ export default function Hub() {
               }}
             />
           ) : null}
-
-
-            ? currentMap.colliders?.map((collider) => (
-                <div
-                  key={collider.id}
-                  className="hubColliderDebug"
-                  style={{
-                    left: collider.x,
-                    top: collider.y,
-                    width: collider.width,
-                    height: collider.height,
-                  }}
-                >
-                  <span className="hubColliderDebugLabel">{collider.id}</span>
-                </div>
-              ))
-            : null}
 
           {debugMode ? (
             <div
