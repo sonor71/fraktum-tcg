@@ -185,6 +185,42 @@ margin: 0 auto;
   background: radial-gradient(circle, rgba(0, 221, 255, 0.2), rgba(103, 68, 203, 0.08) 62%, transparent 64%);
 }
 
+.hubColliderDebug,
+.hubPlayerCollisionDebug {
+  position: absolute;
+  pointer-events: none;
+}
+
+.hubColliderDebug {
+  z-index: 11;
+  border: 1px solid rgba(255, 64, 64, 0.92);
+  background: rgba(255, 32, 32, 0.28);
+  box-shadow: inset 0 0 18px rgba(255, 64, 64, 0.24);
+}
+
+.hubColliderDebugLabel {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  color: #ffd6d6;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.82);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.hubPlayerCollisionDebug {
+  z-index: 45;
+  border: 1px solid rgba(66, 239, 255, 0.95);
+  background: rgba(0, 221, 255, 0.3);
+  box-shadow: 0 0 14px rgba(0, 221, 255, 0.38);
+}
+
 .hubPlayerAnchor {
   position: absolute;
   z-index: 35;
@@ -359,4 +395,60 @@ margin: 0 auto;
   .hubQuickNav {
     justify-content: flex-start;
   }
+}
+
+.hubWorld.is-collider-editing .hubMapLayer {
+  cursor: crosshair;
+}
+
+.hubWorld.is-collider-editing .hubColliderDebug {
+  pointer-events: auto;
+}
+
+.hubColliderDebug.is-selected {
+  border-color: rgba(255, 229, 92, 1);
+  box-shadow: 0 0 0 2px rgba(255, 229, 92, 0.78), inset 0 0 18px rgba(255, 229, 92, 0.2);
+}
+
+.hubColliderDraftDebug {
+  position: absolute;
+  z-index: 46;
+  border: 2px dashed rgba(66, 239, 255, 0.98);
+  background: rgba(0, 221, 255, 0.12);
+  box-shadow: 0 0 18px rgba(0, 221, 255, 0.34);
+  pointer-events: none;
+}
+
+.hubColliderEditorPanel {
+  display: grid;
+  gap: 8px;
+  min-width: min(440px, calc(100vw - 72px));
+}
+
+.hubColliderEditorPanel button {
+  justify-self: start;
+  min-height: 34px;
+  border: 1px solid rgba(137, 228, 255, 0.34);
+  border-radius: 12px;
+  padding: 8px 12px;
+  color: #effbff;
+  background: linear-gradient(180deg, rgba(80, 43, 145, 0.55), rgba(3, 10, 20, 0.88));
+  font-weight: 900;
+}
+
+.hubColliderExport {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  border: 1px solid rgba(137, 228, 255, 0.24);
+  border-radius: 12px;
+  padding: 10px;
+  color: #dff8ff;
+  background: rgba(2, 5, 12, 0.82);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.hubColliderEditorPanel small {
+  color: rgba(255, 230, 164, 0.84);
+  font-weight: 800;
 }

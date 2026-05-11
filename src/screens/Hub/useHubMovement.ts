@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { HubBounds, HubDirection, HubMapConfig, HubPoint } from "./hubMaps";
+import type { HubBounds, HubCollider, HubDirection, HubMapConfig, HubPoint } from "./hubMaps";
 import { HUB_PLAYER_SPEED } from "./hubMaps";
 
 type Camera = HubPoint;
@@ -11,7 +11,17 @@ type Size = {
 
 const MOVEMENT_KEYS = new Set(["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"]);
 
-const CAMERA_ZOOM = 1.5;
+export const HUB_CAMERA_ZOOM = 1.5;
+
+export const PLAYER_COLLISION_WIDTH = 28;
+export const PLAYER_COLLISION_HEIGHT = 16;
+
+type CollisionRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -22,8 +32,8 @@ function getBounds(map: HubMapConfig, dimensions: Size): HubBounds {
 }
 
 function getCameraTarget(player: HubPoint, viewport: Size): Camera {
-  const visibleWidth = viewport.width / CAMERA_ZOOM;
-  const visibleHeight = viewport.height / CAMERA_ZOOM;
+  const visibleWidth = viewport.width / HUB_CAMERA_ZOOM;
+  const visibleHeight = viewport.height / HUB_CAMERA_ZOOM;
 
   return {
     x: player.x - visibleWidth / 2,
@@ -35,6 +45,24 @@ function resolveDirection(dx: number, dy: number, fallback: HubDirection): HubDi
   if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "right" : "left";
   if (dy !== 0) return dy > 0 ? "down" : "up";
   return fallback;
+}
+
+export function getPlayerCollisionRect(player: HubPoint): CollisionRect {
+  return {
+    x: player.x - PLAYER_COLLISION_WIDTH / 2,
+    y: player.y - PLAYER_COLLISION_HEIGHT,
+    width: PLAYER_COLLISION_WIDTH,
+    height: PLAYER_COLLISION_HEIGHT,
+  };
+}
+
+function rectanglesOverlap(a: CollisionRect, b: CollisionRect) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function collidesWithMap(position: HubPoint, colliders: HubCollider[] = []) {
+  const playerRect = getPlayerCollisionRect(position);
+  return colliders.some((collider) => rectanglesOverlap(playerRect, collider));
 }
 
 export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint: HubPoint) {
@@ -138,18 +166,23 @@ export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint
         const length = Math.hypot(dx, dy) || 1;
         const bounds = getBounds(map, dimensions);
 
-        const next = {
-          x: clamp(
-            positionRef.current.x + (dx / length) * HUB_PLAYER_SPEED * deltaSeconds,
-            bounds.x,
-            bounds.x + bounds.width
-          ),
-          y: clamp(
-            positionRef.current.y + (dy / length) * HUB_PLAYER_SPEED * deltaSeconds,
-            bounds.y,
-            bounds.y + bounds.height
-          ),
+        const currentPosition = positionRef.current;
+        const stepX = (dx / length) * HUB_PLAYER_SPEED * deltaSeconds;
+        const stepY = (dy / length) * HUB_PLAYER_SPEED * deltaSeconds;
+
+        const nextXPosition = {
+          x: clamp(currentPosition.x + stepX, bounds.x, bounds.x + bounds.width),
+          y: currentPosition.y,
         };
+
+        const xPosition = collidesWithMap(nextXPosition, map.colliders) ? currentPosition : nextXPosition;
+
+        const nextYPosition = {
+          x: xPosition.x,
+          y: clamp(xPosition.y + stepY, bounds.y, bounds.y + bounds.height),
+        };
+
+        const next = collidesWithMap(nextYPosition, map.colliders) ? xPosition : nextYPosition;
 
         positionRef.current = next;
         setPosition(next);
@@ -176,7 +209,7 @@ export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint
 
   const mapTransform = useMemo(
     () =>
-      `translate3d(${-camera.x * CAMERA_ZOOM}px, ${-camera.y * CAMERA_ZOOM}px, 0) scale(${CAMERA_ZOOM})`,
+      `translate3d(${-camera.x * HUB_CAMERA_ZOOM}px, ${-camera.y * HUB_CAMERA_ZOOM}px, 0) scale(${HUB_CAMERA_ZOOM})`,
     [camera.x, camera.y]
   );
 
