@@ -13,6 +13,22 @@ export type HubBounds = {
   height: number;
 };
 
+export type HubCollider = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type HubOcclusionZone = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type HubExit = {
   id: string;
   label: string;
@@ -40,18 +56,22 @@ export type HubMapConfig = {
   height: number;
   spawnPoint: HubPoint;
   allowedBounds?: HubBounds;
+  colliders?: HubCollider[];
+  occlusionZones?: HubOcclusionZone[];
   exits: HubExit[];
 };
 
 export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
   hub1: {
-  id: "hub1",
-  title: "Fraktum Hub",
-  image: "/assets/hub/hub1.png",
-  width: 1315,
-  height: 1196,
-  spawnPoint: { x: 640, y: 493 },
-  exits: [
+    id: "hub1",
+    title: "Fraktum Hub",
+    image: "/assets/hub/hub1.png",
+    width: 1315,
+    height: 1196,
+    spawnPoint: { x: 640, y: 493 },
+    colliders: [],
+    occlusionZones: [],
+    exits: [
       {
         id: "to-market",
         type: "map-transition",
@@ -94,6 +114,8 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     width: 1728,
     height: 1024,
     spawnPoint: { x: 864, y: 860 },
+    colliders: [],
+    occlusionZones: [],
     exits: [
       {
         id: "market-to-hub",
@@ -115,6 +137,8 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     width: 1024,
     height: 1536,
     spawnPoint: { x: 512, y: 1360 },
+    colliders: [],
+    occlusionZones: [],
     exits: [
       {
         id: "archive-to-hub",
@@ -136,6 +160,8 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     width: 1024,
     height: 1536,
     spawnPoint: { x: 512, y: 1360 },
+    colliders: [],
+    occlusionZones: [],
     exits: [
       {
         id: "arena-to-hub",
