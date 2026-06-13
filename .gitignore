@@ -58,3 +58,10 @@ Thumbs.db
 
 # Unity crash reports
 sysinfo.txt
+
+# Keep Unity WebGL build used by React/Vite
+!public/unity-match/Build/
+!public/unity-match/Build/**
+!public/unity-match/TemplateData/
+!public/unity-match/TemplateData/**
+!public/unity-match/index.html
