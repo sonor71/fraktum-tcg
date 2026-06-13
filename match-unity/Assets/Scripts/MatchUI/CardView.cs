@@ -134,7 +134,7 @@ public class CardView : MonoBehaviour
         GameObject go = new GameObject(name, typeof(RectTransform), typeof(Text));
         go.transform.SetParent(transform, false);
         RectTransform rt = go.GetComponent<RectTransform>(); rt.anchorMin = min; rt.anchorMax = max; rt.offsetMin = rt.offsetMax = Vector2.zero;
-        Text t = go.GetComponent<Text>(); t.font = Resources.GetBuiltinResource<Font>("Arial.ttf"); t.fontSize = size; t.fontStyle = style; t.alignment = anchor; t.color = new Color(.96f, .88f, .72f, 1); return t;
+        Text t = go.GetComponent<Text>(); t.font = UIFontUtility.GetDefaultFont(); t.fontSize = size; t.fontStyle = style; t.alignment = anchor; t.color = new Color(.96f, .88f, .72f, 1); return t;
     }
 
     private Image AddImage(string name, Transform parent, Color color, Vector2 min, Vector2 max, Vector2 offMin, Vector2 offMax)
