@@ -531,6 +531,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1632151966}
   - component: {fileID: 1632151967}
+  - component: {fileID: 1632151968}
   m_Layer: 0
   m_Name: Matchmanager
   m_TagString: Untagged
@@ -586,6 +587,18 @@ MonoBehaviour:
     graveyard: []
     board: []
     playedCardThisTurn: 0
+--- !u!114 &1632151968
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1632151965}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6471676b2cf74dfda6d918bc97e37ee7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
