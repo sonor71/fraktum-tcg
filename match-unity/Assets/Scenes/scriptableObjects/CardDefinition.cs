@@ -16,6 +16,14 @@ public class CardDefinition : ScriptableObject
     public string effectKey;
     public string passiveKey;
 
+    [Header("Payload / Runtime Metadata")]
+    public string image;
+    public string frontSrc;
+    public string edition;
+    public bool isFoil;
+    public string foilColor;
+    public string collection;
+
     [TextArea]
     public string description;
 }
