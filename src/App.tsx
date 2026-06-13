@@ -1,0 +1,42 @@
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import BackgroundMusic from "./components/BackgroundMusic";
+import Collection from "./screens/Collection";
+import Deck from "./screens/Deck";
+import Hub from "./screens/Hub";
+import Inventory from "./screens/Inventory";
+import MatchLauncher from "./screens/MatchLauncher";
+import Market from "./screens/Market";
+import MatchScreen from "./screens/Match/MatchScreen";
+import PackOpen from "./screens/PackOpen";
+import PlayModes from "./screens/PlayModes";
+import Profile from "./screens/Profile";
+import Settings from "./screens/Settings";
+import Shop from "./screens/Shop";
+import Shell from "./ui/shell";
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <BackgroundMusic />
+
+      <Shell>
+        <Routes>
+          <Route path="/" element={<Hub />} />
+          <Route path="/collection" element={<Collection />} />
+          <Route path="/inventory" element={<Inventory />} />
+          <Route path="/deck" element={<Deck />} />
+          <Route path="/deck-builder" element={<Navigate to="/deck" replace />} />
+          <Route path="/shop" element={<Shop />} />
+          <Route path="/market" element={<Market />} />
+          <Route path="/pack" element={<PackOpen />} />
+          <Route path="/play" element={<PlayModes />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/match-launcher" element={<MatchLauncher />} />
+          <Route path="/match/ai" element={<MatchScreen />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Shell>
+    </BrowserRouter>
+  );
+}

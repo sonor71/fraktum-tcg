@@ -1,0 +1,803 @@
+/* =========================================================
+   AUCTION MARKET
+   ========================================================= */
+
+.marketRoot {
+  width: min(1640px, 100%);
+  margin: 0 auto;
+  padding: 4px 0 42px;
+}
+
+.marketHero,
+.marketStats,
+.marketInventoryPanel,
+.marketCreatePanel,
+.marketAuctionsPanel,
+.marketBackendNote {
+  border: 1px solid rgba(149, 228, 255, 0.14);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.025)),
+    rgba(3, 8, 15, 0.76);
+  box-shadow: 0 24px 68px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+  backdrop-filter: blur(16px);
+}
+
+.marketHero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 26px;
+  padding: 28px 30px;
+  border-radius: 30px;
+  overflow: hidden;
+  position: relative;
+}
+
+.marketHero::before {
+  content: "";
+  position: absolute;
+  inset: -40% auto auto 42%;
+  width: 620px;
+  height: 330px;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(0, 215, 255, 0.13), rgba(111, 72, 212, 0.08) 42%, transparent 72%);
+  filter: blur(16px);
+}
+
+.marketHero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.marketKicker,
+.marketPanelHead span {
+  color: rgba(123, 233, 255, 0.78);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.marketHero h1 {
+  margin: 7px 0 10px;
+  font-size: clamp(34px, 4vw, 62px);
+  line-height: 0.96;
+  letter-spacing: -0.03em;
+}
+
+.marketHero p:not(.marketKicker) {
+  max-width: 780px;
+  margin: 0;
+  color: rgba(229, 242, 252, 0.72);
+  line-height: 1.6;
+}
+
+.marketHeroActions,
+.auctionRowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.marketStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.marketStats > div {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  padding: 20px 22px;
+  background: rgba(3, 9, 17, 0.7);
+}
+
+.marketStats span,
+.auctionMetrics span,
+.marketEstimate span {
+  color: rgba(223, 239, 251, 0.57);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.marketStats strong {
+  color: #f5fbff;
+  font-size: 23px;
+}
+
+.marketTabs {
+  display: inline-flex;
+  gap: 6px;
+  margin: 18px 0;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.marketTabs button,
+.marketPrimaryBtn,
+.marketGhostBtn,
+.marketDangerBtn {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid rgba(138, 225, 255, 0.14);
+  border-radius: 13px;
+  color: #edf9ff;
+  background: linear-gradient(180deg, rgba(31, 49, 68, 0.92), rgba(7, 14, 23, 0.95));
+  font-weight: 900;
+  cursor: pointer;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.marketTabs button {
+  color: rgba(232, 244, 252, 0.67);
+  background: transparent;
+  border-color: transparent;
+}
+
+.marketTabs button.is-active,
+.marketPrimaryBtn {
+  color: #fff;
+  border-color: rgba(112, 224, 255, 0.34);
+  background: linear-gradient(180deg, rgba(46, 120, 153, 0.72), rgba(41, 24, 94, 0.88));
+  box-shadow: 0 0 25px rgba(0, 215, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.marketDangerBtn {
+  border-color: rgba(255, 105, 119, 0.24);
+  color: #ffd7da;
+  background: linear-gradient(180deg, rgba(100, 34, 47, 0.7), rgba(30, 9, 16, 0.94));
+}
+
+.marketTabs button:hover,
+.marketPrimaryBtn:hover,
+.marketGhostBtn:hover,
+.marketDangerBtn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(145, 231, 255, 0.42);
+  box-shadow: 0 0 24px rgba(0, 215, 255, 0.11);
+}
+
+.marketNotice {
+  margin: 0 0 16px;
+  padding: 12px 15px;
+  border: 1px solid rgba(255, 218, 118, 0.28);
+  border-radius: 15px;
+  color: #ffe9ab;
+  background: rgba(255, 193, 57, 0.08);
+  font-weight: 800;
+}
+
+.marketSellLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 390px;
+  gap: 18px;
+  align-items: start;
+}
+
+.marketInventoryPanel,
+.marketCreatePanel,
+.marketAuctionsPanel {
+  border-radius: 26px;
+  padding: 20px;
+}
+
+.marketCreatePanel {
+  position: sticky;
+  top: 0;
+}
+
+.marketPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.marketPanelHead h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+
+.marketPanelHead > strong {
+  min-width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  color: #dffbff;
+  background: rgba(0, 215, 255, 0.08);
+  border: 1px solid rgba(126, 229, 255, 0.14);
+}
+
+.marketFilters {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 150px 160px;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.marketFilters input,
+.marketFilters select,
+.marketField input,
+.marketField select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 13px;
+  border: 1px solid rgba(145, 224, 255, 0.14);
+  border-radius: 13px;
+  color: #eff9ff;
+  background: rgba(3, 9, 17, 0.82);
+  outline: none;
+}
+
+.marketFilters input:focus,
+.marketFilters select:focus,
+.marketField input:focus,
+.marketField select:focus {
+  border-color: rgba(116, 228, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(0, 215, 255, 0.07);
+}
+
+.marketCardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 13px;
+  max-height: min(680px, calc(100vh - 330px));
+  overflow-y: auto;
+  padding: 3px 7px 6px 3px;
+}
+
+.marketInventoryCard {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(151, 224, 255, 0.11);
+  border-radius: 18px;
+  color: #eef9ff;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.055), rgba(0, 0, 0, 0.31));
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.marketInventoryCard:hover,
+.marketInventoryCard.is-selected {
+  transform: translateY(-3px);
+  border-color: rgba(121, 227, 255, 0.38);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3), 0 0 25px rgba(0, 215, 255, 0.08);
+}
+
+.marketInventoryCard.is-selected {
+  box-shadow: 0 0 0 2px rgba(103, 223, 255, 0.18), 0 17px 32px rgba(0, 0, 0, 0.34);
+}
+
+.marketInventoryArt {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 29 / 40;
+  margin-bottom: 10px;
+  border-radius: 14px;
+}
+
+.marketInventoryCard > strong,
+.marketInventoryCard > span,
+.marketInventoryCard > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marketInventoryCard > strong {
+  font-size: 13px;
+}
+
+.marketInventoryCard > span {
+  margin-top: 3px;
+  color: rgba(220, 240, 252, 0.58);
+  font-size: 9px;
+}
+
+.marketInventoryCard > small {
+  margin-top: 6px;
+  color: rgba(255, 227, 156, 0.76);
+  font-size: 10px;
+}
+
+.marketGridTilt,
+.marketPreviewTilt,
+.auctionMiniTilt {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.marketCardImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  border-radius: inherit;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.marketFoilBadge {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 12;
+  padding: 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(120deg, rgba(255, 65, 177, 0.86), rgba(75, 255, 157, 0.8));
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.18);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.marketSelectedCard {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 15px;
+  align-items: center;
+  margin-bottom: 17px;
+  padding: 13px;
+  border: 1px solid rgba(145, 225, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.marketSelectedCard > .tiltCardScene {
+  width: 116px;
+  aspect-ratio: 29 / 40;
+  height: auto;
+  border-radius: 13px;
+}
+
+.marketSelectedCard strong,
+.marketSelectedCard span,
+.marketSelectedCard small {
+  display: block;
+}
+
+.marketSelectedCard span {
+  margin-top: 5px;
+  color: rgba(224, 240, 251, 0.58);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.marketSelectedCard small {
+  margin-top: 8px;
+  color: #ffe2a0;
+}
+
+.marketField {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 13px;
+}
+
+.marketField > span {
+  color: rgba(230, 243, 252, 0.78);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.marketField > span small {
+  color: rgba(230, 243, 252, 0.42);
+  font-weight: 700;
+}
+
+.marketEstimate {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid rgba(255, 221, 132, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 197, 72, 0.05);
+}
+
+.marketEstimate > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.marketEstimate strong {
+  color: #ffe5a3;
+}
+
+.marketWarning,
+.marketBackendNote,
+.auctionPayoutLine {
+  color: rgba(231, 242, 251, 0.68);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.marketWarning {
+  margin-bottom: 14px;
+  padding: 12px;
+  border-left: 3px solid rgba(255, 204, 89, 0.56);
+  background: rgba(255, 196, 64, 0.045);
+}
+
+.marketSubmitBtn {
+  width: 100%;
+  min-height: 52px;
+}
+
+.marketEmpty {
+  display: grid;
+  place-items: center;
+  min-height: 170px;
+  padding: 28px;
+  border: 1px dashed rgba(152, 225, 255, 0.14);
+  border-radius: 18px;
+  color: rgba(225, 241, 252, 0.55);
+  text-align: center;
+}
+
+.marketEmptyLarge {
+  min-height: 310px;
+}
+
+.auctionList {
+  display: grid;
+  gap: 12px;
+}
+
+.auctionRow {
+  display: grid;
+  grid-template-columns: 94px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(148, 224, 255, 0.11);
+  border-radius: 19px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.045), rgba(0, 0, 0, 0.25));
+}
+
+.auctionRow.is-sold {
+  border-color: rgba(102, 255, 181, 0.2);
+}
+
+.auctionRow.is-expired,
+.auctionRow.is-cancelled,
+.auctionRow.is-claimed {
+  opacity: 0.7;
+}
+
+.auctionRowCard {
+  position: relative;
+  width: 94px;
+  aspect-ratio: 29 / 40;
+  border-radius: 12px;
+}
+
+.auctionRowTitle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.auctionRowTitle strong,
+.auctionRowTitle span {
+  display: block;
+}
+
+.auctionRowTitle > div > span {
+  margin-top: 4px;
+  color: rgba(222, 239, 251, 0.5);
+  font-size: 10px;
+}
+
+.auctionStatus {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: rgba(235, 246, 253, 0.72);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.auctionStatus.is-active {
+  border-color: rgba(96, 222, 255, 0.24);
+  color: #bbf5ff;
+}
+
+.auctionStatus.is-sold {
+  border-color: rgba(102, 255, 181, 0.26);
+  color: #baffdd;
+}
+
+.auctionStatus.is-expired,
+.auctionStatus.is-cancelled {
+  color: rgba(235, 241, 246, 0.55);
+}
+
+.auctionMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.auctionMetrics > div {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.19);
+}
+
+.auctionMetrics strong {
+  font-size: 13px;
+}
+
+.auctionBidder,
+.auctionPayoutLine {
+  margin-top: 9px;
+}
+
+.auctionBidder {
+  color: rgba(221, 239, 251, 0.62);
+  font-size: 12px;
+}
+
+.auctionPayoutLine strong {
+  color: #afffd4;
+}
+
+.auctionRowActions {
+  justify-content: flex-end;
+  max-width: 190px;
+}
+
+.auctionRowActions button {
+  width: 100%;
+}
+
+.marketBackendNote {
+  margin-top: 18px;
+  padding: 15px 18px;
+  border-radius: 17px;
+}
+
+.marketBackendNote strong {
+  color: #ffe3a0;
+}
+
+.marketCardGrid::-webkit-scrollbar {
+  width: 9px;
+}
+
+.marketCardGrid::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(151, 227, 255, 0.18);
+}
+
+@media (max-width: 1260px) {
+  .marketSellLayout {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+
+  .marketFilters {
+    grid-template-columns: 1fr 140px;
+  }
+
+  .marketFilters select:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .auctionRow {
+    grid-template-columns: 82px minmax(0, 1fr);
+  }
+
+  .auctionRowCard {
+    width: 82px;
+  }
+
+  .auctionRowActions {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .auctionRowActions button {
+    width: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .marketHero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .marketStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .marketSellLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .marketCreatePanel {
+    position: static;
+  }
+
+  .marketCardGrid {
+    max-height: none;
+  }
+
+  .auctionMetrics {
+    grid-template-columns: repeat(2, minmax(90px, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .marketStats {
+    grid-template-columns: 1fr;
+  }
+
+  .marketFilters {
+    grid-template-columns: 1fr;
+  }
+
+  .marketFilters select:last-child {
+    grid-column: auto;
+  }
+
+  .marketCardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .marketSelectedCard {
+    grid-template-columns: 92px minmax(0, 1fr);
+  }
+
+  .marketSelectedCard > .tiltCardScene {
+    width: 92px;
+  }
+
+  .auctionRow {
+    grid-template-columns: 68px minmax(0, 1fr);
+    gap: 11px;
+  }
+
+  .auctionRowCard {
+    width: 68px;
+  }
+
+  .auctionRowTitle {
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .auctionMetrics {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+
+/* =========================================================
+   SAFE VISUAL OVERRIDES
+   Keep market cards compact. Never stretch a small card list
+   across the whole panel and never alter global card styles.
+   ========================================================= */
+
+.marketRoot .marketCardGrid {
+  grid-template-columns: repeat(auto-fill, minmax(126px, 148px));
+  justify-content: start;
+  align-items: start;
+  gap: 14px;
+}
+
+.marketRoot .marketInventoryCard {
+  width: 148px;
+  max-width: 148px;
+  padding: 8px;
+  overflow: visible;
+}
+
+.marketRoot .marketInventoryArt {
+  width: 100%;
+  aspect-ratio: 29 / 40;
+  margin: 0 0 8px;
+  overflow: visible;
+}
+
+.marketRoot .marketInventoryArt > .tiltCardScene,
+.marketRoot .marketGridTilt {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.marketRoot .marketCardImage {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.marketRoot .marketFoilBadge {
+  top: 5px;
+  left: 5px;
+  padding: 3px 6px;
+  font-size: 7px;
+}
+
+.marketRoot .marketInventoryCard > strong {
+  font-size: 11px;
+}
+
+.marketRoot .marketInventoryCard > span {
+  font-size: 8px;
+}
+
+.marketRoot .marketInventoryCard > small {
+  font-size: 9px;
+}
+
+@media (max-width: 620px) {
+  .marketRoot .marketCardGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .marketRoot .marketInventoryCard {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* =========================================================
+   BUY CATALOG
+   ========================================================= */
+
+.marketBuyLayout .marketInventoryCard.is-unaffordable {
+  opacity: 0.72;
+}
+
+.marketBuyLayout .marketInventoryCard.is-unaffordable:hover,
+.marketBuyLayout .marketInventoryCard.is-unaffordable.is-selected {
+  opacity: 1;
+}
+
+.marketPurchasePanel .marketPurchaseEstimate {
+  margin-top: 0;
+}
+
+.marketBuyButton:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+  filter: grayscale(0.35);
+  transform: none;
+  box-shadow: none;
+}
+
+.marketBuyButton:disabled:hover {
+  transform: none;
+  border-color: rgba(138, 225, 255, 0.14);
+  box-shadow: none;
+}
