@@ -1,0 +1,3 @@
+import type { PlayerState } from "../../game/core/types";
+import { getBonusPercent } from "../../game/engine/BonusSystem";
+export function HeroPanel({ player, label }: { player: PlayerState; label: string }) { return <section className="tsHero"><strong>{label}</strong><img src={player.hero.definition.image} alt={player.hero.definition.title} /><p>HP {player.hp}/{player.maxHp}</p><p>Shield {player.shield}</p><p>Will {player.will}/{player.maxWill}</p><p>Bonus cards +{getBonusPercent(player.bonusCards)}%</p><div className="tsBonus">{player.bonusCards.map((c) => <img key={c.instanceId} src={c.definition.image} alt={c.definition.title} />)}</div></section>; }

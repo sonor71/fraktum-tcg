@@ -1,0 +1,14 @@
+export type MatchPhase = "mulligan" | "roll" | "main" | "enemy" | "ended";
+export type PlayerId = "player" | "enemy";
+export type CardType = "character" | "attack" | "effect" | "tactic" | "bonus";
+export type CardRarity = "common" | "rare" | "epic" | "legendary" | "mythic" | "chromatic" | "exotic" | "divine";
+export type EffectTarget = "selfHero" | "enemyHero" | "frontEnemyCard" | "randomEnemy" | "opponentDeck" | "self" | "enemy";
+export type CardEffect = { op: string; target?: EffectTarget; value?: number; key?: string; percent?: number };
+export type CardDefinition = { id: string; title: string; ruTitle?: string; type: CardType; rarity: CardRarity; cost: number; attack: number; health: number; description: string; image: string; effectKey?: string; effects?: CardEffect[]; collection?: string };
+export type CardInstance = { instanceId: string; baseId: string; definition: CardDefinition; currentAttack: number; currentHealth: number; serial?: string; foil?: boolean; ownerId: PlayerId };
+export type ActiveEffect = { id: string; sourceId: string; label: string; value?: number; turns?: number };
+export type PendingEffect = { sourceId: string; effect: CardEffect; playerId: PlayerId };
+export type TargetRef = { type: "hero" | "slot"; playerId: PlayerId; slotIndex?: number };
+export type PlayerState = { id: PlayerId; hero: CardInstance; hp: number; maxHp: number; shield: number; will: number; maxWill: number; deck: CardInstance[]; hand: CardInstance[]; discard: CardInstance[]; bonusCards: CardInstance[]; effects: ActiveEffect[]; lastTurnLostHp: number };
+export type MatchState = { id: string; phase: MatchPhase; turn: number; activePlayerId: PlayerId; player: PlayerState; enemy: PlayerState; board: { playerSlots: Array<CardInstance | null>; enemySlots: Array<CardInstance | null> }; stack: PendingEffect[]; log: string[]; rngSeed: number; winner?: "player" | "enemy" | "draw"; lastRoll?: number };
+export type StartMatchPayload = { seed?: number; playerDeck?: CardDefinition[]; enemyDeck?: CardDefinition[] };
