@@ -477,7 +477,7 @@ export default function Shell({ children }: PropsWithChildren) {
           <UtilityDrawer
             activePanel={activePanel}
             onClose={() => setActivePanel(null)}
-            onNavigateToMatch={() => nav("/match-launcher")}
+            onNavigateToMatch={() => nav("/play")}
           />
         </>
       ) : null}
