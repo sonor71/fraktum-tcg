@@ -31,7 +31,6 @@ export default function App() {
           <Route path="/play" element={<PlayModes />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/match-launcher" element={<Navigate to="/match/ai" replace />} />
           <Route path="/match/ai" element={<MatchPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

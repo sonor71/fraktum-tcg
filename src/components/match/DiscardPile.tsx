@@ -1,2 +1,15 @@
 import type { CardInstance } from "../../game/core/types";
-export function DiscardPile({ cards }: { cards: CardInstance[] }) { return <div className="tsPile">{cards.at(-1) ? <img src={cards.at(-1)?.definition.image} alt="Discard" /> : <div className="tsEmpty" />}<span>Discard {cards.length}</span></div>; }
+
+export function DiscardPile({ cards, owner }: { cards: CardInstance[]; owner: "player" | "enemy" }) {
+  const top = cards.at(-1);
+
+  return (
+    <button className={`matchPile is-discard is-${owner}`} type="button" title={`${owner} discard: ${cards.length} cards`} disabled>
+      <span className="matchPileStack" aria-hidden="true">
+        {top ? <img src={top.definition.image} alt="" /> : <span className="matchPileEmpty" />}
+      </span>
+      <b>Discard</b>
+      <span>{cards.length}</span>
+    </button>
+  );
+}

@@ -557,9 +557,9 @@ occlusionZones: [
       {
         id: "enter-match",
         type: "route",
-        label: "Enter Match",
-        prompt: "Press E to enter Match",
-        route: "/match-launcher",
+        label: "Choose Mode",
+        prompt: "Press E to choose a play mode",
+        route: "/play",
         x: 512,
         y: 260,
         radius: 110,
