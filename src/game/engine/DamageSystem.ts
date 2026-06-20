@@ -1,0 +1,3 @@
+import type { PlayerState } from "../core/types";
+export function damageHero(player: PlayerState, raw: number) { if (player.effects.some((e) => e.id === "armor_of_chaos") && raw < 3) return { player, dealt: 0 }; const blocked = Math.min(player.shield, raw); const dealt = Math.max(0, raw - blocked); return { player: { ...player, shield: Math.max(0, player.shield - raw), hp: Math.max(0, player.hp - dealt), lastTurnLostHp: player.lastTurnLostHp + dealt }, dealt }; }
+export function healHero(player: PlayerState, amount: number) { return { ...player, hp: Math.min(player.maxHp, player.hp + amount) }; }

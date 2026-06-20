@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom"
-import { useGameStore } from "../useGameStore";
 
 type Mode = {
   id: string;
@@ -15,54 +14,7 @@ type Mode = {
 export default function PlayModes() {
   const nav = useNavigate();
 
-  const openUnityMatch = () => {
-    const store = useGameStore.getState();
-
-    const matchPayload = {
-      mode: "ai",
-      playerName: "Player",
-      enemyName: "AI",
-      deckIds: store.deckIds ?? [],
-      startedAt: Date.now(),
-    };
-    
-    console.log("MATCH PAYLOAD SEND:", matchPayload);
-    
-    localStorage.setItem(
-      "fraktum_match_payload",
-      JSON.stringify(matchPayload)
-    );
-
-    const matchWindow = window.open(
-      "/unity-match/index.html",
-      "_blank",
-      "width=1400,height=900"
-    );
-
-    const timer = window.setInterval(() => {
-      if (!matchWindow || matchWindow.closed) {
-        window.clearInterval(timer);
-
-        const raw = localStorage.getItem("fraktum_match_result");
-
-        if (raw) {
-          try {
-            const result = JSON.parse(raw);
-
-            console.log("Результат матча:", result);
-
-            if (result.winner === "player") {
-              console.log("Игрок победил — выдаём награду");
-            }
-
-            localStorage.removeItem("fraktum_match_result");
-          } catch (error) {
-            console.error("Ошибка чтения результата матча:", error);
-          }
-        }
-      }
-    }, 500);
-  };
+  const openReactMatch = () => nav("/match/ai");
 
   const MODES: Mode[] = [
     {
@@ -81,11 +33,11 @@ export default function PlayModes() {
       title: "СОРЕВНОВАТЕЛЬНЫЙ С ИИ",
       subtitle: "быстрый матч",
       description:
-        "Сразись против искусственного интеллекта по правилам FRAKTUM: D20, Воля, сброс, рулетка и Пробуждение уже встроены в матч.",
+        "Сразись против искусственного интеллекта по правилам FRAKTUM: D20, Воля, эффекты карт и простой ИИ уже встроены в React/TypeScript матч.",
       status: "open",
       badge: "доступно",
       actionLabel: "ИГРАТЬ",
-      onClick: openUnityMatch,
+      onClick: openReactMatch,
     },
     {
       id: "money",
