@@ -1,0 +1,1 @@
+export function D20View({ value, onRoll, disabled }: { value?: number; onRoll: () => void; disabled?: boolean }) { return <button className="tsD20" type="button" onClick={onRoll} disabled={disabled}><span>D20</span><strong>{value ?? "—"}</strong></button>; }

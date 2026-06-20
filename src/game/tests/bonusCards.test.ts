@@ -1,0 +1,4 @@
+import { describe, expect, it } from "vitest";
+import { createInitialMatchState, playCard } from "../engine/MatchEngine";
+import { getBonusPercent } from "../engine/BonusSystem";
+describe("bonus cards", () => { it("are extracted from deck and hand", () => { const state = createInitialMatchState(); expect(state.player.hand.some((c) => c.definition.type === "bonus")).toBe(false); expect(state.player.deck.some((c) => c.definition.type === "bonus")).toBe(false); expect(state.player.bonusCards.map((c) => c.baseId)).toEqual(expect.arrayContaining(["crystal_of_time", "phoenix_feather"])); expect(getBonusPercent(state.player.bonusCards)).toBe(20); }); it("spends Will after play", () => { const state = createInitialMatchState(); const card = state.player.hand.find((c) => c.definition.cost > 0)!; const next = playCard({ ...state, phase: "main", player: { ...state.player, will: 5 } }, "player", card.instanceId); expect(next.player.will).toBe(5 - card.definition.cost); }); });

@@ -4,9 +4,8 @@ import Collection from "./screens/Collection";
 import Deck from "./screens/Deck";
 import Hub from "./screens/Hub";
 import Inventory from "./screens/Inventory";
-import MatchLauncher from "./screens/MatchLauncher";
 import Market from "./screens/Market";
-import MatchScreen from "./screens/Match/MatchScreen";
+import MatchPage from "./components/match/MatchPage";
 import PackOpen from "./screens/PackOpen";
 import PlayModes from "./screens/PlayModes";
 import Profile from "./screens/Profile";
@@ -32,8 +31,8 @@ export default function App() {
           <Route path="/play" element={<PlayModes />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/match-launcher" element={<MatchLauncher />} />
-          <Route path="/match/ai" element={<MatchScreen />} />
+          <Route path="/match-launcher" element={<Navigate to="/match/ai" replace />} />
+          <Route path="/match/ai" element={<MatchPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Shell>
