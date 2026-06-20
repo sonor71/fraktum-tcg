@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { applyMatchResult, createMatchPayload, launchUnityMatch, MATCH_PAYLOAD_KEY, pollMatchResult, simulateMatchResult, UNITY_MATCH_PATH } from "../services/matchBridge";
+import { applyMatchResult, createMatchPayload, launchReactMatch, MATCH_PAYLOAD_KEY, pollMatchResult, simulateMatchResult, REACT_MATCH_PATH } from "../services/matchBridge";
 import { useGameStore } from "../useGameStore";
 
 export default function MatchLauncher() {
@@ -24,8 +24,8 @@ export default function MatchLauncher() {
   function prepareAndLaunch() {
     if (!valid) return;
     createMatchPayload(playerName, deckIds, ownedCards);
-    setMessage(`Payload saved to localStorage:${MATCH_PAYLOAD_KEY}. Opening ${UNITY_MATCH_PATH}...`);
-    launchUnityMatch();
+    setMessage(`Payload saved to localStorage:${MATCH_PAYLOAD_KEY}. Opening ${REACT_MATCH_PATH}...`);
+    launchReactMatch();
   }
 
   function applyResult() {
@@ -36,7 +36,7 @@ export default function MatchLauncher() {
   return (
     <section className="demo-page">
       <header className="page-head"><div><p>Arena Bridge</p><h1>Match Launcher</h1></div><button onClick={() => nav("/")} type="button">Back to Hub</button></header>
-      <div className="glass-panel bridge-panel"><h2>JS → Unity Payload</h2><p>Deck readiness: {deckIds.length}/20 cards. Minimum 10 cards.</p>{!valid ? <p className="warning">Build a valid deck before launching. You can seed starter cards in Settings.</p> : <p className="success">Ready for Unity demo mode.</p>}<div className="deck-actions"><button disabled={!valid} onClick={prepareAndLaunch} type="button">Create Payload & Launch Unity</button><button onClick={() => { simulateMatchResult(); setMessage("Simulated Unity result in localStorage."); }} type="button">Simulate Match Result</button><button onClick={applyResult} type="button">Apply Match Result</button></div><pre>{JSON.stringify(previewPayload, null, 2)}</pre>{message ? <p>{message}</p> : null}</div>
+      <div className="glass-panel bridge-panel"><h2>JS → React Match Payload</h2><p>Deck readiness: {deckIds.length}/20 cards. Minimum 10 cards.</p>{!valid ? <p className="warning">Build a valid deck before launching. You can seed starter cards in Settings.</p> : <p className="success">Ready for React match mode.</p>}<div className="deck-actions"><button disabled={!valid} onClick={prepareAndLaunch} type="button">Create Payload & Launch React Match</button><button onClick={() => { simulateMatchResult(); setMessage("Simulated React match result in localStorage."); }} type="button">Simulate Match Result</button><button onClick={applyResult} type="button">Apply Match Result</button></div><pre>{JSON.stringify(previewPayload, null, 2)}</pre>{message ? <p>{message}</p> : null}</div>
     </section>
   );
 }
