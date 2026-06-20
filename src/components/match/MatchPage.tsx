@@ -8,15 +8,18 @@ import "./match.css";
 export default function MatchPage() {
   const nav = useNavigate();
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [uiLog, setUiLog] = useState<string[]>([]);
   const [state, send] = useReducer((current: ReturnType<typeof createInitialMatchState>, action: GameAction) => dispatch(current, action), undefined, () => createInitialMatchState());
 
-  const playCard = (cardInstanceId: string) => {
+  const playCard = (cardInstanceId: string, slotIndex: number) => {
     setSelectedCardId(cardInstanceId);
     window.setTimeout(() => {
-      send({ type: "PLAY_CARD", playerId: "player", cardInstanceId });
+      send({ type: "PLAY_CARD", playerId: "player", cardInstanceId, target: { type: "slot", playerId: "player", slotIndex } });
       setSelectedCardId(null);
     }, 120);
   };
+
+  const addUiLog = (message: string) => setUiLog((entries) => [...entries, message].slice(-6));
 
   return (
     <main className="matchPage">
@@ -34,6 +37,8 @@ export default function MatchPage() {
         onSelectCard={setSelectedCardId}
         onRoll={() => send({ type: "ROLL_D20", playerId: "player" })}
         onPlay={playCard}
+        onInvalidDrop={addUiLog}
+        logEntries={[...state.log, ...uiLog]}
         onEndTurn={() => send({ type: "END_TURN", playerId: "player" })}
         onAiTurn={() => send({ type: "AI_TURN" })}
       />

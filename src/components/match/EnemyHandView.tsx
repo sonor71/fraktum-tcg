@@ -9,11 +9,11 @@ export function EnemyHandView({ count }: { count: number }) {
             className="enemyHandCard"
             key={index}
             style={{
-              transform: `translateX(${offset * 34}px) translateY(${Math.abs(offset) * -4}px) rotate(${offset * -7}deg)`,
+              transform: `translateX(${offset * 34}px) translateY(${Math.abs(offset) * -6}px) rotate(${offset * 7}deg)`,
               zIndex: count - index,
             }}
           >
-            <img src="/cards/card-back.png" alt="Enemy card back" />
+            <img className="enemyCardBack" src="/cards/card-back.png" alt="Enemy card back" />
           </div>
         );
       })}

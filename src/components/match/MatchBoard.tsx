@@ -8,7 +8,7 @@ import { EnemyHandView } from "./EnemyHandView";
 import { HandView } from "./HandView";
 import { HeroPanel } from "./HeroPanel";
 
-export function MatchBoard({ state, selectedCardId, onSelectCard, onRoll, onPlay, onEndTurn, onAiTurn }: { state: MatchState; selectedCardId: string | null; onSelectCard: (id: string | null) => void; onRoll: () => void; onPlay: (id: string) => void; onEndTurn: () => void; onAiTurn: () => void }) {
+export function MatchBoard({ state, selectedCardId, onSelectCard, onRoll, onPlay, onInvalidDrop, onEndTurn, onAiTurn, logEntries }: { state: MatchState; selectedCardId: string | null; onSelectCard: (id: string | null) => void; onRoll: () => void; onPlay: (id: string, slotIndex: number) => void; onInvalidDrop: (message: string) => void; onEndTurn: () => void; onAiTurn: () => void; logEntries?: string[] }) {
   const canPlay = state.activePlayerId === "player" && state.phase === "main";
   const canRoll = state.activePlayerId === "player" && state.phase === "roll";
 
@@ -56,7 +56,7 @@ export function MatchBoard({ state, selectedCardId, onSelectCard, onRoll, onPlay
               <button className="matchGoldButton" type="button" onClick={onEndTurn} disabled={state.activePlayerId !== "player"}>End turn</button>
               <button className="matchGhostButton" type="button" onClick={onAiTurn} disabled={state.activePlayerId !== "enemy"}>Run AI</button>
             </div>
-            <BattleLog entries={state.log} />
+            <BattleLog entries={logEntries ?? state.log} />
           </div>
         </main>
 
@@ -69,7 +69,7 @@ export function MatchBoard({ state, selectedCardId, onSelectCard, onRoll, onPlay
         </aside>
       </div>
 
-      <HandView cards={state.player.hand} onPlay={onPlay} disabled={!canPlay} selectedId={selectedCardId} onSelect={onSelectCard} />
+      <HandView cards={state.player.hand} onPlay={onPlay} disabled={!canPlay} selectedId={selectedCardId} onSelect={onSelectCard} onInvalidDrop={onInvalidDrop} />
     </div>
   );
 }
