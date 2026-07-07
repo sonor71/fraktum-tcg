@@ -1,13 +1,16 @@
+import { DeckWillUpgradePanel } from "../components/match/DeckWillUpgradePanel";
 import { useMemo, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGameStore, type OwnedCard } from "../useGameStore";
 import TiltCard from "../components/TiltCard";
+
 
 type DeckKind = "main" | "character" | "boost";
 type SlotKey = "character" | `boost_${number}` | `main_${number}`;
 
 type Card = {
   id: string; // instanceId
+  baseId: string;
   title: string;
   kind: DeckKind;
   frontSrc: string;
@@ -56,6 +59,16 @@ function compareBestCards(a: Card, b: Card) {
   if (powerDiff !== 0) return powerDiff;
 
   return a.title.localeCompare(b.title);
+}
+
+
+function uniqueByBaseId(cards: Card[]) {
+  const used = new Set<string>();
+  return cards.filter((card) => {
+    if (used.has(card.baseId)) return false;
+    used.add(card.baseId);
+    return true;
+  });
 }
 
 function DeckCardVisual({ card, compact = false }: { card: Card; compact?: boolean }) {
@@ -110,6 +123,7 @@ export default function Deck() {
 
         return {
           id: c.instanceId,
+          baseId: c.baseId,
           title: c.title,
           kind: kindOf(c),
           frontSrc: c.frontSrc,
@@ -231,24 +245,38 @@ export default function Deck() {
     return snap.mainsIds[Number(slot.split("_")[1])] ?? null;
   }
 
-  // убираем карту из всех слотов ЕЁ ТИПА (чтобы не было дублей)
-  function removeFromKindEverywhere(snap: SlotsSnapshot, id: string, kind: DeckKind) {
+  // убираем карту из всех слотов ЕЁ ТИПА по baseId, а не по instanceId.
+  // Так в колоде не может быть двух копий одной карты с разными serial-id.
+  function removeBaseFromKindEverywhere(snap: SlotsSnapshot, baseId: string, kind: DeckKind) {
+    const sameBase = (id: string | null) => Boolean(id && byId.get(id)?.baseId === baseId);
+
     if (kind === "character") {
-      if (snap.charId === id) snap.charId = null;
+      if (sameBase(snap.charId)) snap.charId = null;
       return;
     }
     if (kind === "boost") {
-      snap.boostsIds = snap.boostsIds.map((x) => (x === id ? null : x));
+      snap.boostsIds = snap.boostsIds.map((id) => (sameBase(id) ? null : id));
       return;
     }
-    snap.mainsIds = snap.mainsIds.map((x) => (x === id ? null : x));
+    snap.mainsIds = snap.mainsIds.map((id) => (sameBase(id) ? null : id));
   }
 
   function applySlots(snap: SlotsSnapshot) {
+    const usedBaseIds = new Set<string>();
     const next: string[] = [];
-    if (snap.charId) next.push(snap.charId);
-    for (const id of snap.boostsIds) if (id) next.push(id);
-    for (const id of snap.mainsIds) if (id) next.push(id);
+
+    const pushUnique = (id: string | null) => {
+      if (!id) return;
+      const card = byId.get(id);
+      if (!card) return;
+      if (usedBaseIds.has(card.baseId)) return;
+      usedBaseIds.add(card.baseId);
+      next.push(id);
+    };
+
+    pushUnique(snap.charId);
+    for (const id of snap.boostsIds) pushUnique(id);
+    for (const id of snap.mainsIds) pushUnique(id);
     setDeckIds(next);
   }
 
@@ -295,22 +323,24 @@ export default function Deck() {
       return;
     }
 
-    // 2) тащим ИЗ пула -> кладём в слот (убираем из других слотов этого типа)
-    removeFromKindEverywhere(snap, card.id, targetKind);
+    // 2) тащим ИЗ пула -> кладём в слот.
+    // Повторки запрещены: если такая же base-карта уже стояла в другом слоте, убираем её.
+    removeBaseFromKindEverywhere(snap, card.baseId, targetKind);
     setSlotId(snap, targetSlot, card.id);
     applySlots(snap);
     setHoverSlot(null);
   }
 
   function autoBuild() {
-    const chars = pool.filter((c) => c.kind === "character").sort(compareBestCards).slice(0, 1);
-    const boostsPick = pool.filter((c) => c.kind === "boost").sort(compareBestCards).slice(0, 4);
+    const chars = uniqueByBaseId(pool.filter((c) => c.kind === "character").sort(compareBestCards)).slice(0, 1);
+    const boostsPick = uniqueByBaseId(pool.filter((c) => c.kind === "boost").sort(compareBestCards)).slice(0, 4);
 
     const remainingDeckSpace = Math.max(0, 20 - chars.length - boostsPick.length);
-    const mainsPick = pool
-      .filter((c) => c.kind === "main")
-      .sort(compareBestCards)
-      .slice(0, Math.min(18, remainingDeckSpace));
+    const mainsPick = uniqueByBaseId(
+      pool
+        .filter((c) => c.kind === "main")
+        .sort(compareBestCards)
+    ).slice(0, Math.min(18, remainingDeckSpace));
 
     setDeckIds([...chars, ...boostsPick, ...mainsPick].map((c) => c.id));
   }
@@ -319,11 +349,12 @@ export default function Deck() {
     alert("Сохранено (zustand persist).");
   }
 
-  // пул: карты, которых нет в deckIds
+  // пул: карты, baseId которых ещё не используется в deckIds.
+  // Если у игрока есть несколько serial-копий одной карты, в колоду можно положить только одну.
   const notInDeck = useMemo(() => {
-    const set = new Set(deckIds);
-    return pool.filter((c) => !set.has(c.id));
-  }, [pool, deckIds]);
+    const usedBaseIds = new Set(deckCards.map((card) => card.baseId));
+    return pool.filter((card) => !usedBaseIds.has(card.baseId));
+  }, [pool, deckCards]);
 
   const mainsPool = notInDeck.filter((c) => c.kind === "main").slice(0, 10);
   const boostsPool = notInDeck.filter((c) => c.kind === "boost").slice(0, 6);
@@ -501,6 +532,7 @@ export default function Deck() {
                     onDragStart={(e) => onDragStartSlot(e, key, c)}
                     onDragEnd={onDragEnd}
                   title="Потяни и кинь на другой слот — swap"
+                  
                 >
                   <DeckCardVisual card={c} />
                   <button className="deckRemoveBtn" onClick={() => removeFromDeck(c.id)} type="button">
@@ -512,6 +544,17 @@ export default function Deck() {
             </div>
             );
           })}
+        </div>
+
+        <div
+          className="deckWillUpgradeDock"
+          style={{
+            width: "min(860px, 100%)",
+            margin: "28px auto 0",
+            paddingBottom: 32,
+          }}
+        >
+          <DeckWillUpgradePanel />
         </div>
       </section>
     </div>

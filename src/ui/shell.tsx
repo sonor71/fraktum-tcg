@@ -3,6 +3,7 @@ import type { PropsWithChildren } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useGameStore } from "../useGameStore";
 import type { OwnedCard } from "../game/types";
+import { CloudAutoSync } from "../cloud/CloudAutoSync";
 
 type UtilityPanel = "friends" | "battlePass" | "dailyQuests" | "leaderboard";
 
@@ -392,6 +393,7 @@ export default function Shell({ children }: PropsWithChildren) {
 
   return (
     <div className={`shell ${reducedMotion ? "is-reduced-motion" : ""}`}>
+      <CloudAutoSync />
       <div className="shellFx shellFxGrid" />
       <div className="shellFx shellFxGlow shellFxGlowA" />
       <div className="shellFx shellFxGlow shellFxGlowB" />
@@ -477,7 +479,7 @@ export default function Shell({ children }: PropsWithChildren) {
           <UtilityDrawer
             activePanel={activePanel}
             onClose={() => setActivePanel(null)}
-            onNavigateToMatch={() => nav("/match-launcher")}
+            onNavigateToMatch={() => nav("/play")}
           />
         </>
       ) : null}

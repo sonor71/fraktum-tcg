@@ -64,4 +64,5 @@ sysinfo.txt
 !public/unity-match/Build/**
 !public/unity-match/TemplateData/
 !public/unity-match/TemplateData/**
-!public/unity-match/index.html
+!public/unity-match/index.html.env.production
+release/

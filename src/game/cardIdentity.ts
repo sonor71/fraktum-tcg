@@ -225,7 +225,7 @@ export const CARD_IDENTITIES: Record<string, CardIdentity> = {
     ruName: "Древесные лозы",
     enName: "Wood Vines",
     image: "/cards/wood-vines.png",
-    rarity: "эпическая",
+    rarity: "обычная",
     code: "WLV",
     number: 13,
   },

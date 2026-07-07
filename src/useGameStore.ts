@@ -27,8 +27,69 @@ const DEFAULT_FRIENDS: FriendEntry[] = [
   { id: "friend-orion", nickname: "Orion", status: "offline" },
 ];
 
+export type MatchOutcome = "win" | "loss" | "draw";
+
+export type StoreProfileProgress = {
+  level: number;
+  xp: number;
+  totalXp: number;
+  coins: number;
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  updatedAt: string;
+};
+
+export type MatchRewardResult = {
+  outcome: MatchOutcome;
+  xp: number;
+  coins: number;
+  levelBefore: number;
+  levelAfter: number;
+  xpBefore: number;
+  xpAfter: number;
+  xpForNextBefore: number;
+  xpForNextAfter: number;
+  coinsBefore: number;
+  coinsAfter: number;
+  leveledUp: boolean;
+  profile: StoreProfileProgress;
+};
+
+export type WillUpgradeKey = "maxWill" | "regen";
+
+export type WillUpgradeState = {
+  maxWill: number;
+  regen: number;
+};
+
+export type WillMatchStats = {
+  maxWill: number;
+  regenPerRound: number;
+};
+
+export type WillUpgradePreview = {
+  totalPoints: number;
+  spentPoints: number;
+  availablePoints: number;
+  maxWillLevel: number;
+  regenLevel: number;
+  maxWill: number;
+  regenPerRound: number;
+  maxWillCanUpgrade: boolean;
+  regenCanUpgrade: boolean;
+};
+
 const STARTER_COINS = 300;
-const XP_PER_LEVEL = 100;
+const WIN_MATCH_XP = 120;
+const WIN_MATCH_COINS = 50;
+const LOSS_REWARD_DIVISOR = 5;
+const WILL_UPGRADE_LEVEL_STEP = 2;
+const WILL_UPGRADE_BASE_MAX = 5;
+const WILL_UPGRADE_BASE_REGEN = 0;
+const WILL_UPGRADE_MAX_MAX_WILL_LEVEL = 7;
+const WILL_UPGRADE_MAX_REGEN_LEVEL = 5;
 const CRAFT_COST = 10;
 const MAX_DECK_SIZE = 20;
 const MAX_SHOWCASE_SIZE = 3;
@@ -146,6 +207,7 @@ export type GameState = {
   free: number;
   ownedCards: OwnedCard[];
   deckIds: string[];
+  willUpgrades: WillUpgradeState;
   showcaseCardIds: string[];
   openedPacksCount: number;
   matchHistory: MatchHistoryEntry[];
@@ -197,8 +259,10 @@ export type GameState = {
   removeFromDeck: (id: string) => void;
   clearDeck: () => void;
   setDeckIds: (ids: string[]) => void;
+  upgradeWillStat: (key: WillUpgradeKey) => boolean;
+  resetWillUpgrades: () => void;
   setShowcaseCard: (slot: number, id: string) => void;
-  applyMatchResultToProgress: (result: MatchResult) => void;
+  applyMatchResultToProgress: (result: MatchResult) => MatchRewardResult | null;
   giveDemoCoins: () => void;
   giveStarterCards: () => void;
   clearInventory: () => void;
@@ -215,6 +279,151 @@ const INSTANCE_ID_PATTERN = /^[A-Z0-9]{3}-\d{3}-\d{6}$/;
 function toNonNegativeInteger(value: unknown, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : fallback;
+}
+
+function safeNumber(value: unknown, fallback: number) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function getXpRequiredForLevel(level: number) {
+  const safeLevel = Math.max(1, Math.floor(safeNumber(level, 1)));
+  const completedLevels = safeLevel - 1;
+
+  // Beta curve: every next level costs more XP.
+  return Math.floor(100 + completedLevels * 65 + Math.pow(completedLevels, 1.65) * 32);
+}
+
+export function getLevelProgressFromTotalXp(totalXp: number) {
+  let level = 1;
+  let xpIntoLevel = Math.max(0, Math.floor(safeNumber(totalXp, 0)));
+
+  while (xpIntoLevel >= getXpRequiredForLevel(level)) {
+    xpIntoLevel -= getXpRequiredForLevel(level);
+    level += 1;
+  }
+
+  return {
+    level,
+    xpIntoLevel,
+    xpForNext: getXpRequiredForLevel(level),
+  };
+}
+
+function normalizeWillUpgrades(value: unknown): WillUpgradeState {
+  const raw = typeof value === "object" && value !== null ? (value as Partial<WillUpgradeState>) : {};
+
+  return {
+    maxWill: Math.min(WILL_UPGRADE_MAX_MAX_WILL_LEVEL, toNonNegativeInteger(raw.maxWill)),
+    regen: Math.min(WILL_UPGRADE_MAX_REGEN_LEVEL, toNonNegativeInteger(raw.regen)),
+  };
+}
+
+export function getTotalWillUpgradePoints(level: number) {
+  return Math.max(0, Math.floor(Math.max(0, Math.floor(safeNumber(level, 1))) / WILL_UPGRADE_LEVEL_STEP));
+}
+
+export function getSpentWillUpgradePoints(upgrades: WillUpgradeState) {
+  const normalized = normalizeWillUpgrades(upgrades);
+  return normalized.maxWill + normalized.regen;
+}
+
+export function getAvailableWillUpgradePoints(level: number, upgrades: WillUpgradeState) {
+  return Math.max(0, getTotalWillUpgradePoints(level) - getSpentWillUpgradePoints(upgrades));
+}
+
+export function getWillStatsFromUpgrades(upgrades: WillUpgradeState): WillMatchStats {
+  const normalized = normalizeWillUpgrades(upgrades);
+
+  return {
+    maxWill: WILL_UPGRADE_BASE_MAX + normalized.maxWill,
+    regenPerRound: WILL_UPGRADE_BASE_REGEN + normalized.regen,
+  };
+}
+
+export function getWillUpgradePreview(level: number, upgrades: WillUpgradeState): WillUpgradePreview {
+  const normalized = normalizeWillUpgrades(upgrades);
+  const stats = getWillStatsFromUpgrades(normalized);
+  const totalPoints = getTotalWillUpgradePoints(level);
+  const spentPoints = getSpentWillUpgradePoints(normalized);
+  const availablePoints = Math.max(0, totalPoints - spentPoints);
+
+  return {
+    totalPoints,
+    spentPoints,
+    availablePoints,
+    maxWillLevel: normalized.maxWill,
+    regenLevel: normalized.regen,
+    maxWill: stats.maxWill,
+    regenPerRound: stats.regenPerRound,
+    maxWillCanUpgrade: availablePoints > 0 && normalized.maxWill < WILL_UPGRADE_MAX_MAX_WILL_LEVEL,
+    regenCanUpgrade: availablePoints > 0 && normalized.regen < WILL_UPGRADE_MAX_REGEN_LEVEL,
+  };
+}
+
+export function getMatchRewardValues(outcome: MatchOutcome) {
+  if (outcome === "win") {
+    return { xp: WIN_MATCH_XP, coins: WIN_MATCH_COINS };
+  }
+
+  if (outcome === "loss") {
+    return {
+      xp: Math.max(1, Math.floor(WIN_MATCH_XP / LOSS_REWARD_DIVISOR)),
+      coins: Math.max(1, Math.floor(WIN_MATCH_COINS / LOSS_REWARD_DIVISOR)),
+    };
+  }
+
+  return {
+    xp: Math.max(1, Math.floor(WIN_MATCH_XP / 2)),
+    coins: Math.max(1, Math.floor(WIN_MATCH_COINS / 2)),
+  };
+}
+
+function normalizeMatchOutcome(value: unknown, winner: unknown): MatchOutcome {
+  const normalizedResult = String(value ?? "").trim().toLowerCase();
+  const normalizedWinner = String(winner ?? "").trim().toLowerCase();
+
+  if (normalizedWinner === "player" || normalizedResult === "win" || normalizedResult === "victory") return "win";
+  if (normalizedWinner === "enemy" || normalizedWinner === "ai" || normalizedResult === "loss" || normalizedResult === "defeat") return "loss";
+  return "draw";
+}
+
+function buildRewardResult(
+  outcome: MatchOutcome,
+  rewardXp: number,
+  rewardCoins: number,
+  before: Pick<GameState, "xp" | "level" | "coins" | "matchHistory" | "wins">,
+  afterTotalXp: number,
+  afterCoins: number,
+): MatchRewardResult {
+  const beforeProgress = getLevelProgressFromTotalXp(before.xp);
+  const afterProgress = getLevelProgressFromTotalXp(afterTotalXp);
+
+  return {
+    outcome,
+    xp: rewardXp,
+    coins: rewardCoins,
+    levelBefore: beforeProgress.level,
+    levelAfter: afterProgress.level,
+    xpBefore: beforeProgress.xpIntoLevel,
+    xpAfter: afterProgress.xpIntoLevel,
+    xpForNextBefore: beforeProgress.xpForNext,
+    xpForNextAfter: afterProgress.xpForNext,
+    coinsBefore: before.coins,
+    coinsAfter: afterCoins,
+    leveledUp: afterProgress.level > beforeProgress.level,
+    profile: {
+      level: afterProgress.level,
+      xp: afterProgress.xpIntoLevel,
+      totalXp: afterTotalXp,
+      coins: afterCoins,
+      matchesPlayed: before.matchHistory.length + 1,
+      wins: before.wins + (outcome === "win" ? 1 : 0),
+      losses: outcome === "loss" ? 1 : 0,
+      draws: outcome === "draw" ? 1 : 0,
+      updatedAt: new Date().toISOString(),
+    },
+  };
 }
 
 function normalizeRarity(value: unknown): CardRarity {
@@ -307,6 +516,73 @@ function prunePendingPurchases(purchases: Record<string, PendingPackPurchase>) {
   );
 }
 
+
+function shuffleArray<T>(values: readonly T[]) {
+  const result = [...values];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function getOwnedBaseIds(ownedCards: readonly OwnedCard[]) {
+  return new Set(ownedCards.map((card) => card.baseId).filter(Boolean));
+}
+
+function buildUniquePackBaseIds(
+  ownedCards: readonly OwnedCard[],
+  requestedBaseIds: readonly string[],
+  targetCount = requestedBaseIds.length
+) {
+  const target = Math.max(0, Math.floor(Number(targetCount) || 0));
+  if (target <= 0) return [] as string[];
+
+  const blockedBaseIds = getOwnedBaseIds(ownedCards);
+  const selectedBaseIds: string[] = [];
+
+  const tryAdd = (baseId: string) => {
+    if (!CARDS_BY_ID[baseId]) return false;
+    if (blockedBaseIds.has(baseId)) return false;
+    blockedBaseIds.add(baseId);
+    selectedBaseIds.push(baseId);
+    return true;
+  };
+
+  for (const baseId of requestedBaseIds) {
+    if (selectedBaseIds.length >= target) break;
+    tryAdd(baseId);
+  }
+
+  if (selectedBaseIds.length < target) {
+    for (const definition of shuffleArray(CARDS)) {
+      if (selectedBaseIds.length >= target) break;
+      tryAdd(definition.id);
+    }
+  }
+
+  return selectedBaseIds;
+}
+
+function getDeckIdsWithoutDuplicateBase(ownedCards: readonly OwnedCard[], ids: readonly string[]) {
+  const ownedById = new Map(ownedCards.map((card) => [card.instanceId, card]));
+  const usedBaseIds = new Set<string>();
+  const result: string[] = [];
+
+  for (const id of ids) {
+    const card = ownedById.get(id);
+    if (!card?.baseId) continue;
+    if (usedBaseIds.has(card.baseId)) continue;
+
+    usedBaseIds.add(card.baseId);
+    result.push(id);
+
+    if (result.length >= MAX_DECK_SIZE) break;
+  }
+
+  return result;
+}
+
 function createAuctionId(instanceId: string) {
   const randomPart = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -325,8 +601,8 @@ function getAuctionNetProceeds(gross: number) {
   return { gross: safeGross, fee, net: Math.max(0, safeGross - fee) };
 }
 
-function getNextNpcBidAt(now: number) {
-  return now + 7000 + Math.floor(Math.random() * 14000);
+function getNextNpcBidAt(_now: number) {
+  return undefined;
 }
 
 function getBidChance(listing: AuctionListing) {
@@ -341,7 +617,7 @@ function getBidChance(listing: AuctionListing) {
   return 0.1 + foilBonus;
 }
 
-function placeNpcBid(listing: AuctionListing, now: number, force = false): AuctionListing {
+export function placeNpcBid(listing: AuctionListing, now: number, force = false): AuctionListing {
   if (listing.status !== "active" || now >= listing.endsAt) return listing;
 
   const chance = getBidChance(listing);
@@ -392,28 +668,13 @@ function placeNpcBid(listing: AuctionListing, now: number, force = false): Aucti
 function finishAuction(listing: AuctionListing, now: number): AuctionListing {
   if (listing.status !== "active") return listing;
 
+  // No NPC/бот last-second sales. Until Supabase player bids are connected,
+  // a lot without real bids simply expires and the card can be returned.
   if (listing.currentBid > 0) {
     return {
       ...listing,
       status: "sold",
       salePrice: listing.currentBid,
-      endsAt: now,
-      nextNpcBidAt: undefined,
-    };
-  }
-
-  const priceRatio = listing.card.marketValue / Math.max(1, listing.startingPrice);
-  const lastSecondSaleChance = Math.max(0.08, Math.min(0.86, priceRatio * 0.48));
-
-  if (Math.random() < lastSecondSaleChance) {
-    const bidder = NPC_BIDDERS[Math.floor(Math.random() * NPC_BIDDERS.length)];
-    return {
-      ...listing,
-      currentBid: listing.startingPrice,
-      bidCount: 1,
-      highestBidder: bidder,
-      status: "sold",
-      salePrice: listing.startingPrice,
       endsAt: now,
       nextNpcBidAt: undefined,
     };
@@ -438,6 +699,7 @@ function createInitialState() {
     free: STARTER_COINS,
     ownedCards: [] as OwnedCard[],
     deckIds: [] as string[],
+    willUpgrades: { maxWill: 0, regen: 0 } as WillUpgradeState,
     showcaseCardIds: [] as string[],
     openedPacksCount: 0,
     matchHistory: [] as MatchHistoryEntry[],
@@ -572,11 +834,10 @@ function normalizePersistedState(persisted: unknown): ReturnType<typeof createIn
     return ownedCards.find((card) => card.baseId === id)?.instanceId ?? null;
   };
 
-  const deckIds = (incoming.deckIds ?? [])
+  const mappedDeckIds = (incoming.deckIds ?? [])
     .map(mapOwnedId)
-    .filter((id): id is string => id !== null)
-    .filter((id, index, ids) => ids.indexOf(id) === index)
-    .slice(0, MAX_DECK_SIZE);
+    .filter((id): id is string => id !== null);
+  const deckIds = getDeckIdsWithoutDuplicateBase(ownedCards, mappedDeckIds);
 
   const showcaseCardIds = (incoming.showcaseCardIds ?? [])
     .map(mapOwnedId)
@@ -611,12 +872,13 @@ function normalizePersistedState(persisted: unknown): ReturnType<typeof createIn
     playerName: typeof incoming.playerName === "string" ? incoming.playerName : base.playerName,
     avatar: typeof incoming.avatar === "string" ? incoming.avatar : base.avatar,
     xp,
-    level: Math.max(1, Math.floor(xp / XP_PER_LEVEL) + 1),
+    level: getLevelProgressFromTotalXp(xp).level,
     coins: toNonNegativeInteger(incoming.coins ?? incoming.free, base.coins),
     free: toNonNegativeInteger(incoming.coins ?? incoming.free, base.free),
     premium: toNonNegativeInteger(incoming.premium, base.premium),
     ownedCards,
     deckIds,
+    willUpgrades: normalizeWillUpgrades(incoming.willUpgrades),
     showcaseCardIds,
     openedPacksCount: toNonNegativeInteger(incoming.openedPacksCount),
     matchHistory: Array.isArray(incoming.matchHistory) ? incoming.matchHistory.slice(0, MAX_MATCH_HISTORY) : [],
@@ -665,7 +927,7 @@ export const useGameStore = create<GameState>()(
 
       addXp: (amount) => {
         const totalXp = Math.max(0, get().xp + Math.floor(Number(amount) || 0));
-        set({ xp: totalXp, level: Math.max(1, Math.floor(totalXp / XP_PER_LEVEL) + 1) });
+        set({ xp: totalXp, level: getLevelProgressFromTotalXp(totalXp).level });
       },
 
       addPremium: (amount) => {
@@ -761,13 +1023,16 @@ export const useGameStore = create<GameState>()(
       grantCardsByBaseIds: (baseIds, packId) => get().addOwnedCards(baseIds.map((baseId) => ({ baseId, packId }))),
 
       openPack: (definitions, packId) => {
-        const issued = get().addOwnedCards(definitions.map((card) => ({ baseId: card.id, packId })));
+        const requestedBaseIds = definitions.map((card) => card.id);
+        const uniqueBaseIds = buildUniquePackBaseIds(get().ownedCards, requestedBaseIds, requestedBaseIds.length);
+        const issued = get().addOwnedCards(uniqueBaseIds.map((baseId) => ({ baseId, packId })));
         set({ openedPacksCount: get().openedPacksCount + 1 });
         return issued;
       },
 
       openPackByBaseIds: (baseIds, packId) => {
-        const issued = get().grantCardsByBaseIds(baseIds, packId);
+        const uniqueBaseIds = buildUniquePackBaseIds(get().ownedCards, baseIds, baseIds.length);
+        const issued = get().grantCardsByBaseIds(uniqueBaseIds, packId);
         set({ openedPacksCount: get().openedPacksCount + 1 });
         return issued;
       },
@@ -801,7 +1066,8 @@ export const useGameStore = create<GameState>()(
         const validBaseIds = baseIds.filter((baseId) => Boolean(CARDS_BY_ID[baseId]));
         if (validBaseIds.length !== baseIds.length) return null;
 
-        const issued = get().addOwnedCards(validBaseIds.map((baseId) => ({ baseId, packId })));
+        const uniqueBaseIds = buildUniquePackBaseIds(get().ownedCards, validBaseIds, validBaseIds.length);
+        const issued = get().addOwnedCards(uniqueBaseIds.map((baseId) => ({ baseId, packId })));
         const pendingPackPurchases = { ...get().pendingPackPurchases };
         delete pendingPackPurchases[sessionId];
 
@@ -842,7 +1108,7 @@ export const useGameStore = create<GameState>()(
           listedAt: now,
           endsAt: now + safeDurationMinutes * 60 * 1000,
           status: "active",
-          nextNpcBidAt: getNextNpcBidAt(now),
+          nextNpcBidAt: undefined,
         };
 
         set({
@@ -872,18 +1138,10 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
-      simulateAuctionBid: (listingId) => {
-        const now = Date.now();
-        let changed = false;
-        const auctionListings = get().auctionListings.map((listing) => {
-          if (listing.id !== listingId || listing.status !== "active") return listing;
-          const updated = placeNpcBid(listing, now, true);
-          changed = updated !== listing;
-          return updated;
-        });
-
-        if (changed) set({ auctionListings });
-        return changed;
+      simulateAuctionBid: (_listingId) => {
+        // Stage W: market bots/test bids are disabled. Real bids must come from
+        // Supabase player accounts in the next backend stage.
+        return false;
       },
 
       processAuctionMarket: (requestedNow) => {
@@ -895,11 +1153,6 @@ export const useGameStore = create<GameState>()(
           if (now >= listing.endsAt) {
             changed = true;
             return finishAuction(listing, now);
-          }
-
-          if (listing.nextNpcBidAt && now >= listing.nextNpcBidAt) {
-            changed = true;
-            return placeNpcBid(listing, now);
           }
 
           return listing;
@@ -942,23 +1195,44 @@ export const useGameStore = create<GameState>()(
       },
 
       addToDeck: (id) => {
-        const owned = get().ownedCards.some((card) => card.instanceId === id);
-        const deck = get().deckIds;
-        if (!owned || deck.includes(id) || deck.length >= MAX_DECK_SIZE) return;
-        set({ deckIds: [...deck, id] });
+        const card = get().ownedCards.find((entry) => entry.instanceId === id);
+        if (!card) return;
+
+        const deckCards = get().deckIds
+          .map((deckId) => get().ownedCards.find((entry) => entry.instanceId === deckId))
+          .filter((entry): entry is OwnedCard => Boolean(entry));
+
+        if (deckCards.some((entry) => entry.baseId === card.baseId) || deckCards.length >= MAX_DECK_SIZE) return;
+        set({ deckIds: getDeckIdsWithoutDuplicateBase(get().ownedCards, [...get().deckIds, id]) });
       },
 
       removeFromDeck: (id) => set({ deckIds: get().deckIds.filter((deckId) => deckId !== id) }),
       clearDeck: () => set({ deckIds: [] }),
 
       setDeckIds: (ids) => {
-        const ownedIds = new Set(get().ownedCards.map((card) => card.instanceId));
-        set({
-          deckIds: ids
-            .filter((id, index, values) => ownedIds.has(id) && values.indexOf(id) === index)
-            .slice(0, MAX_DECK_SIZE),
-        });
+        set({ deckIds: getDeckIdsWithoutDuplicateBase(get().ownedCards, ids) });
       },
+
+      upgradeWillStat: (key) => {
+        if (key !== "maxWill" && key !== "regen") return false;
+
+        const state = get();
+        const current = normalizeWillUpgrades(state.willUpgrades);
+        const preview = getWillUpgradePreview(state.level, current);
+        if (preview.availablePoints <= 0) return false;
+
+        if (key === "maxWill") {
+          if (current.maxWill >= WILL_UPGRADE_MAX_MAX_WILL_LEVEL) return false;
+          set({ willUpgrades: { ...current, maxWill: current.maxWill + 1 } });
+          return true;
+        }
+
+        if (current.regen >= WILL_UPGRADE_MAX_REGEN_LEVEL) return false;
+        set({ willUpgrades: { ...current, regen: current.regen + 1 } });
+        return true;
+      },
+
+      resetWillUpgrades: () => set({ willUpgrades: { maxWill: 0, regen: 0 } }),
 
       setShowcaseCard: (slot, id) => {
         const ownedIds = new Set(get().ownedCards.map((card) => card.instanceId));
@@ -969,28 +1243,38 @@ export const useGameStore = create<GameState>()(
       },
 
       applyMatchResultToProgress: (result) => {
-        const historyId = `match-${result.finishedAt}`;
-        if (get().matchHistory.some((entry) => entry.id === historyId)) return;
+        const resultRecord = result as unknown as Record<string, unknown>;
+        const finishedAt = toNonNegativeInteger(result.finishedAt, Date.now());
+        const historyId = typeof resultRecord.id === "string" && resultRecord.id.trim()
+          ? resultRecord.id
+          : `match-${finishedAt}`;
 
-        const rewardCoins = toNonNegativeInteger(result.coins);
-        const rewardXp = toNonNegativeInteger(result.xp);
-        const totalXp = get().xp + rewardXp;
-        const coins = get().coins + rewardCoins;
-        const resultText = String(result.result ?? "").toLowerCase();
-        const isWin = result.winner === "player" || resultText === "win" || resultText === "victory";
+        if (get().matchHistory.some((entry) => entry.id === historyId)) return null;
+
+        const outcome = normalizeMatchOutcome(resultRecord.result, resultRecord.winner);
+        const fallbackReward = getMatchRewardValues(outcome);
+        const rewardCoins = toNonNegativeInteger(result.coins, fallbackReward.coins);
+        const rewardXp = toNonNegativeInteger(result.xp, fallbackReward.xp);
+        const before = get();
+        const totalXp = before.xp + rewardXp;
+        const coins = before.coins + rewardCoins;
+        const level = getLevelProgressFromTotalXp(totalXp).level;
+        const reward = buildRewardResult(outcome, rewardXp, rewardCoins, before, totalXp, coins);
 
         set({
           coins,
           free: coins,
           xp: totalXp,
-          level: Math.max(1, Math.floor(totalXp / XP_PER_LEVEL) + 1),
-          battlePassXp: get().battlePassXp + rewardXp,
-          wins: get().wins + (isWin ? 1 : 0),
+          level,
+          battlePassXp: before.battlePassXp + rewardXp,
+          wins: before.wins + (outcome === "win" ? 1 : 0),
           matchHistory: [
             { ...result, id: historyId, appliedAt: Date.now() },
-            ...get().matchHistory,
+            ...before.matchHistory,
           ].slice(0, MAX_MATCH_HISTORY),
         });
+
+        return reward;
       },
 
       giveDemoCoins: () => get().addCoins(1000),
@@ -1104,7 +1388,7 @@ export const useGameStore = create<GameState>()(
     }),
     {
       name: "fraktum-game-store",
-      version: 11,
+      version: 13,
       migrate: (persisted) => normalizePersistedState(persisted),
       merge: (persisted, current) => ({ ...current, ...normalizePersistedState(persisted) }),
     }

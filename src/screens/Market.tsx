@@ -129,13 +129,11 @@ function AuctionRow({
   now,
   onCancel,
   onClaim,
-  onSimulateBid,
 }: {
   listing: AuctionListing;
   now: number;
   onCancel: (id: string) => void;
   onClaim: (id: string) => void;
-  onSimulateBid: (id: string) => void;
 }) {
   const gross = listing.salePrice ?? listing.currentBid;
   const fee = gross > 0 ? Math.max(1, Math.ceil(gross * AUCTION_HOUSE_FEE_RATE)) : 0;
@@ -179,10 +177,8 @@ function AuctionRow({
       </div>
 
       <div className="auctionRowActions">
-        {listing.status === "active" ? (
-          <button type="button" className="marketGhostBtn" onClick={() => onSimulateBid(listing.id)}>
-            Тестовая ставка
-          </button>
+        {listing.status === "active" && !canCancel ? (
+          <span className="marketPlayerBidNote">Ожидается ставка игрока</span>
         ) : null}
 
         {canCancel ? (
@@ -210,7 +206,6 @@ export default function Market() {
   const purchaseMarketCard = useGameStore((state) => state.purchaseMarketCard);
   const createAuctionListing = useGameStore((state) => state.createAuctionListing);
   const cancelAuctionListing = useGameStore((state) => state.cancelAuctionListing);
-  const simulateAuctionBid = useGameStore((state) => state.simulateAuctionBid);
   const processAuctionMarket = useGameStore((state) => state.processAuctionMarket);
   const claimAuctionResult = useGameStore((state) => state.claimAuctionResult);
 
@@ -388,11 +383,6 @@ export default function Market() {
     } else {
       setNotice(`${result.card.title} возвращена в инвентарь.`);
     }
-  }
-
-  function addTestBid(id: string) {
-    const ok = simulateAuctionBid(id);
-    setNotice(ok ? "Тестовый покупатель сделал Premium-ставку." : "Ставку уже нельзя сделать.");
   }
 
   return (
@@ -663,19 +653,18 @@ export default function Market() {
                   now={now}
                   onCancel={cancelListing}
                   onClaim={claimListing}
-                  onSimulateBid={addTestBid}
                 />
               ))}
             </div>
           ) : (
-            <div className="marketEmpty marketEmptyLarge">Ты ещё не выставлял карты на аукцион.</div>
+            <div className="marketEmpty marketEmptyLarge">Пока нет лотов игроков. Выстави карту — она будет ждать реальную ставку после подключения Supabase.</div>
           )}
         </section>
       ) : null}
 
       <div className="marketBackendNote">
-        <strong>Важно:</strong> эта версия рынка работает локально. Каталог позволяет тестировать покупку любой карты,
-        но реальная торговля между аккаунтами потребует backend, базы данных и серверной проверки Premium-транзакций.
+        <strong>Важно:</strong> тестовые ставки ботов отключены. Локальный рынок сейчас позволяет выставлять и возвращать лоты;
+        реальные ставки игроков нужно подключать через Supabase Auth, таблицу auctions/bids и серверную проверку Premium-транзакций.
       </div>
     </div>
   );

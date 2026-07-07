@@ -801,3 +801,23 @@
   border-color: rgba(138, 225, 255, 0.14);
   box-shadow: none;
 }
+/* ================================
+   Stage W: market without test bots
+   Append to src/screens/market.css
+   ================================ */
+
+.marketPlayerBidNote {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 224, 160, .18);
+  border-radius: 12px;
+  color: rgba(255, 232, 180, .72);
+  background: rgba(255, 194, 72, .055);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: center;
+}

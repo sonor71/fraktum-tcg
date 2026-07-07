@@ -1,0 +1,144 @@
+.deckWillUpgradePanel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(215, 163, 72, .28);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(139, 85, 255, .16), transparent 42%),
+    linear-gradient(180deg, rgba(14, 18, 25, .88), rgba(6, 8, 12, .94));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 14px 32px rgba(0,0,0,.26);
+  color: #f6f0df;
+}
+
+.deckWillUpgradeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.deckWillUpgradeHeader span {
+  display: block;
+  color: rgba(255, 224, 160, .72);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.deckWillUpgradeHeader h3 {
+  margin: 2px 0 0;
+  font-size: 20px;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.deckWillUpgradeHeader strong {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid rgba(99, 220, 255, .30);
+  border-radius: 999px;
+  color: #c8f4ff;
+  background: rgba(24, 88, 116, .28);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.deckWillUpgradeSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  background: rgba(0,0,0,.24);
+  font-size: 12px;
+}
+
+.deckWillUpgradeSummary span {
+  color: rgba(246, 240, 223, .68);
+}
+
+.deckWillUpgradeSummary b {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #241205;
+  background: linear-gradient(180deg, #ffe0a0, #c4812e);
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.deckWillUpgradeRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.deckWillUpgradeInfo {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.deckWillUpgradeInfo span {
+  color: #fff5dc;
+  font-size: 13px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.deckWillUpgradeInfo b {
+  color: #ffe0a0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.deckWillUpgradeInfo small {
+  color: rgba(246, 240, 223, .58);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.deckWillUpgradeMeta {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+
+.deckWillUpgradeMeta i {
+  color: rgba(255, 224, 160, .58);
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.deckWillUpgradeMeta button {
+  min-width: 116px;
+  border: 1px solid rgba(215, 163, 72, .42);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: #1b0e06;
+  background: linear-gradient(180deg, #f7cb6b, #8b5519);
+  font-size: 11px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.deckWillUpgradeMeta button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+  filter: grayscale(.35);
+}
+
+.deckWillUpgradeNote {
+  margin: 10px 0 0;
+  color: rgba(246, 240, 223, .50);
+  font-size: 10px;
+  line-height: 1.35;
+}

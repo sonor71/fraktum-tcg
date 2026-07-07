@@ -1,0 +1,180 @@
+.cloudAccountPanel {
+  width: 100%;
+  display: grid;
+  gap: 14px;
+  color: #edf9ff;
+}
+
+.cloudAccountHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cloudAccountHead span,
+.cloudLocalSummary span,
+.cloudMetaRow span,
+.cloudAuthForm label span {
+  color: rgba(123, 233, 255, 0.72);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.cloudAccountHead strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  font-size: clamp(17px, 1.4vw, 24px);
+}
+
+.cloudStatusDot {
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 18px rgba(255,255,255,.16);
+}
+.cloudStatusDot.is-online { background: #45ffc1; box-shadow: 0 0 18px rgba(69,255,193,.55); }
+.cloudStatusDot.is-idle { background: #ffd16d; box-shadow: 0 0 18px rgba(255,209,109,.38); }
+.cloudStatusDot.is-offline { background: #ff6374; box-shadow: 0 0 18px rgba(255,99,116,.44); }
+
+.cloudLocalSummary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cloudLocalSummary span {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(145, 224, 255, .12);
+  border-radius: 13px;
+  background: rgba(0,0,0,.22);
+}
+
+.cloudLocalSummary b {
+  display: block;
+  margin-top: 3px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.cloudNotice {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(145, 224, 255, .13);
+  border-radius: 14px;
+  color: rgba(231,242,251,.72);
+  background: rgba(255,255,255,.035);
+  line-height: 1.45;
+}
+.cloudNotice.is-ok { color: #c9ffe9; border-color: rgba(93,255,190,.22); background: rgba(93,255,190,.055); }
+.cloudNotice.is-warn { color: #ffe8a8; border-color: rgba(255,213,107,.24); background: rgba(255,213,107,.06); }
+.cloudNotice.is-error { color: #ffd1d8; border-color: rgba(255,99,116,.30); background: rgba(255,99,116,.07); }
+
+.cloudSetupBox,
+.cloudAuthForm,
+.cloudSyncActions {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid rgba(145, 224, 255, .10);
+  border-radius: 16px;
+  background: rgba(0,0,0,.20);
+}
+
+.cloudSetupBox code {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 10px;
+  color: #d6f8ff;
+  background: rgba(0,0,0,.35);
+  overflow-x: auto;
+}
+
+.cloudModeTabs {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  background: rgba(0,0,0,.18);
+}
+
+.cloudModeTabs button,
+.cloudSyncActions button,
+.cloudPrimaryBtn {
+  min-height: 40px;
+  border: 1px solid rgba(138, 225, 255, .16);
+  border-radius: 12px;
+  color: #edf9ff;
+  background: linear-gradient(180deg, rgba(31,49,68,.92), rgba(7,14,23,.95));
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.cloudModeTabs button {
+  min-height: 34px;
+  padding: 0 12px;
+  background: transparent;
+  border-color: transparent;
+  color: rgba(232,244,252,.62);
+}
+
+.cloudModeTabs button.is-active,
+.cloudPrimaryBtn {
+  color: #fff;
+  border-color: rgba(112,224,255,.34);
+  background: linear-gradient(180deg, rgba(46,120,153,.72), rgba(41,24,94,.88));
+}
+
+.cloudAuthForm label {
+  display: grid;
+  gap: 6px;
+}
+
+.cloudAuthForm input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(145,224,255,.14);
+  border-radius: 12px;
+  color: #eff9ff;
+  background: rgba(3,9,17,.82);
+  outline: none;
+}
+
+.cloudAuthForm input:focus {
+  border-color: rgba(116,228,255,.42);
+  box-shadow: 0 0 0 3px rgba(0,215,255,.07);
+}
+
+.cloudMetaRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 11px;
+  border-radius: 12px;
+  background: rgba(0,0,0,.22);
+}
+
+.cloudDangerBtn {
+  border-color: rgba(255,99,116,.28) !important;
+  color: #ffd4da !important;
+  background: linear-gradient(180deg, rgba(100,34,47,.70), rgba(30,9,16,.94)) !important;
+}
+
+.cloudSyncActions button:disabled,
+.cloudPrimaryBtn:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .cloudLocalSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
