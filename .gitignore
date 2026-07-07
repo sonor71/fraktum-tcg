@@ -66,3 +66,4 @@ sysinfo.txt
 !public/unity-match/TemplateData/**
 !public/unity-match/index.html.env.production
 release/
+.env.production
