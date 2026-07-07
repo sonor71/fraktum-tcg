@@ -67,3 +67,11 @@ sysinfo.txt
 !public/unity-match/index.html.env.production
 release/
 .env.production
+if (!(Test-Path ".gitignore")) {
+  New-Item ".gitignore" -ItemType File | Out-Null
+}
+@(".env", ".env.local", ".env.production", "release/") | ForEach-Object {
+  if (-not (Select-String -Path ".gitignore" -Pattern ("^" + [regex]::Escape($_) + "$") -Quiet -ErrorAction SilentlyContinue)) {
+    Add-Content -Path ".gitignore" -Value $_
+  }
+}
