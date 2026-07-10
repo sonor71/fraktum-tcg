@@ -77,3 +77,7 @@ if (!(Test-Path ".gitignore")) {
 }
 .vercel
 fraktum-game-dev.zip
+.vercel/
+_backup*/
+*-backup-*/
+fraktum-tcg-main/
