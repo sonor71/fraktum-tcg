@@ -16,6 +16,7 @@ import { drawCards } from "./DrawSystem";
 import { resolveFieldCombat } from "./DamageSystem";
 import {
   BOARD_SIZE,
+  cardRequiresBoardSlot,
   getCardBoardMaxHp,
   getCardCost,
   getCardTitle,
@@ -385,14 +386,16 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
   enemySide = drawCards({ ...enemySide, deck: enemyShuffle.items, hand: [] }, STARTING_HAND_SIZE);
 
   const initiativeRolls: Array<{ player: number; enemy: number }> = [];
-  let firstPlayerId: PlayerId = "player";
-  do {
-    const playerRoll = rollDie(seed, 20);
-    const enemyRoll = rollDie(playerRoll.seed, 20);
-    seed = enemyRoll.seed;
-    initiativeRolls.push({ player: playerRoll.value, enemy: enemyRoll.value });
-    if (playerRoll.value !== enemyRoll.value) firstPlayerId = playerRoll.value > enemyRoll.value ? "player" : "enemy";
-  } while (initiativeRolls[initiativeRolls.length - 1].player === initiativeRolls[initiativeRolls.length - 1].enemy);
+  let firstPlayerId: PlayerId = payload.startingPlayerId === "enemy" ? "enemy" : "player";
+  if (!payload.startingPlayerId) {
+    do {
+      const playerRoll = rollDie(seed, 20);
+      const enemyRoll = rollDie(playerRoll.seed, 20);
+      seed = enemyRoll.seed;
+      initiativeRolls.push({ player: playerRoll.value, enemy: enemyRoll.value });
+      if (playerRoll.value !== enemyRoll.value) firstPlayerId = playerRoll.value > enemyRoll.value ? "player" : "enemy";
+    } while (initiativeRolls[initiativeRolls.length - 1].player === initiativeRolls[initiativeRolls.length - 1].enemy);
+  }
 
   let state: MatchState = {
     id: `match_${Date.now()}`,
@@ -408,7 +411,7 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
     stack: [],
     log: [
       "React TypeScript match started.",
-      `Initiative: ${initiativeRolls.map((r) => `${r.player}:${r.enemy}`).join(", ")}.`,
+      initiativeRolls.length > 0 ? `Initiative: ${initiativeRolls.map((r) => `${r.player}:${r.enemy}`).join(", ")}.` : `Initiative fixed by room: ${playerLabel(firstPlayerId)} starts.`,
       "Bonus cards were assigned to hero slots.",
       `Player Will upgrades: max ${playerWillConfig.maxWill}, regen +${playerWillConfig.regenPerRound}/turn.`,
       `${playerLabel(firstPlayerId)} starts in roll phase.`,
@@ -567,18 +570,19 @@ export function playCard(
 
   const ownSlotsKey = slotsKey(playerId);
   const currentSlots = [...playBlock.state.board[ownSlotsKey]];
-  const slotIndex = getRequestedOrFreeSlotIndex(playBlock.state, playerId, target);
+  const requiresSlot = cardRequiresBoardSlot(card);
+  const slotIndex = requiresSlot ? getRequestedOrFreeSlotIndex(playBlock.state, playerId, target) : -1;
 
-  if (!isValidSlotIndex(slotIndex, currentSlots.length)) {
+  if (requiresSlot && !isValidSlotIndex(slotIndex, currentSlots.length)) {
     return log(state, "Invalid target: no playable slot.");
   }
 
-  if (currentSlots[slotIndex]) {
+  if (requiresSlot && currentSlots[slotIndex]) {
     return log(state, `Invalid target: slot ${slotIndex + 1} is occupied.`);
   }
 
-  const playedCard = { ...normalizePlayedCard(card, state.turn), slotIndex, controllerId: playerId, originalOwnerId: card.originalOwnerId ?? card.ownerId };
-  currentSlots[slotIndex] = playedCard;
+  const playedCard = { ...normalizePlayedCard(card, state.turn), slotIndex: requiresSlot ? slotIndex : undefined, controllerId: playerId, originalOwnerId: card.originalOwnerId ?? card.ownerId };
+  if (requiresSlot) currentSlots[slotIndex] = playedCard;
 
   const paidSide = payWill(side, cost);
   let next: MatchState = {
@@ -596,7 +600,7 @@ export function playCard(
     },
   };
 
-  next = log(next, `${playerLabel(playerId)} played ${getCardTitle(card)} on slot ${slotIndex + 1} (cost ${printedCost}).`);
+  next = log(next, `${playerLabel(playerId)} played ${getCardTitle(card)}${requiresSlot ? ` on slot ${slotIndex + 1}` : ""} (cost ${printedCost}).`);
   next = log(
     next,
     isCardBoardPermanent(playedCard)
@@ -604,7 +608,7 @@ export function playCard(
       : `${getCardTitle(card)} is temporary and will move to discard on the next player D20 roll.`,
   );
 
-  next = resolveCardEffects(next, playerId, playedCard, target, slotIndex);
+  next = resolveCardEffects(next, playerId, playedCard, target, requiresSlot ? slotIndex : undefined);
   next = applyCardPlayedTriggers(next, playerId);
   next = moveDestroyedCardsToDiscard(next);
 
@@ -679,7 +683,7 @@ export function endTurn(state: MatchState, playerId: PlayerId): MatchState {
 
   if (state.phase === "ended") return state;
 
-  let endingState = cleanupTemporaryCards(state);
+  let endingState = state;
   const turnState = endingState.currentTurn;
   if (turnState?.playerId === playerId && turnState.cardsPlayed === 0 && !turnState.skipDamageApplied) {
     endingState = dealDirectHeroDamage(endingState, playerId, SKIP_TURN_DAMAGE, "Skip penalty");

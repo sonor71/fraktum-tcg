@@ -1,6 +1,6 @@
 import type { PlayerId } from "../core/types";
 
-export const BOARD_SIZE = 6;
+export const BOARD_SIZE = 5;
 export const STARTING_HAND_SIZE = 7;
 export const HAND_LIMIT = 7;
 export const MATCH_POINTS_TO_WIN = 2;

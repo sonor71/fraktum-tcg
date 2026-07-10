@@ -4,7 +4,7 @@ import { getBonusPercent, scaleByElementBonus } from "../engine/BonusSystem";
 import { damageHero, resolveFieldCombat } from "../engine/DamageSystem";
 import { drawCards } from "../engine/DrawSystem";
 import { createInitialMatchState, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
-import { clampTimerSeconds, getD20PlayLimit } from "../engine/Rules";
+import { BOARD_SIZE, clampTimerSeconds, getD20PlayLimit } from "../engine/Rules";
 
 const def = (id: string, partial: Partial<CardDefinition> = {}): CardDefinition => ({
   id,
@@ -101,7 +101,7 @@ describe("FRAKTUM Match Rules v1.0", () => {
     const a = inst(def("a", { attack: 7, health: 4 }), "player");
     const d = inst(def("d", { attack: 0, health: 4 }), "enemy");
     let state = createInitialMatchState();
-    state = { ...state, turn: 2, board: { playerSlots: [a, null, null, null, null, null], enemySlots: [d, null, null, null, null, null] } };
+    state = { ...state, turn: 2, board: { playerSlots: [a, null, null, null, null], enemySlots: [d, null, null, null, null] } };
     const next = resolveFieldCombat(state, "player");
     expect(next.enemy.hp).toBe(state.enemy.hp - 3);
     expect(next.player.hp).toBe(state.player.hp);
@@ -109,13 +109,13 @@ describe("FRAKTUM Match Rules v1.0", () => {
   it("18-19 one-shot cards require a free slot", () => {
     const one = inst(def("one", { health: 0 }), "player");
     let state = withTurn(createInitialMatchState(), "player");
-    state = { ...state, player: { ...state.player, will: 5, hand: [one] }, board: { ...state.board, playerSlots: Array(6).fill(inst(def("block", { health: 1 }), "player")) } };
+    state = { ...state, player: { ...state.player, will: 5, hand: [one] }, board: { ...state.board, playerSlots: Array(BOARD_SIZE).fill(inst(def("block", { health: 1 }), "player")) } };
     expect(playCard(state, "player", one.instanceId).player.hand).toContain(one);
   });
   it("20-22 voluntary destroy costs Will/limit and frees slot", () => {
     const unit = inst(def("unit", { health: 3 }), "player");
     let state = withTurn(createInitialMatchState(), "player", 1);
-    state = { ...state, player: { ...state.player, will: 2 }, board: { ...state.board, playerSlots: [unit, null, null, null, null, null] } };
+    state = { ...state, player: { ...state.player, will: 2 }, board: { ...state.board, playerSlots: [unit, null, null, null, null] } };
     const next = destroyOwnCard(state, "player", 0);
     expect(next.player.will).toBe(1);
     expect(next.currentTurn?.playsUsed).toBe(1);
