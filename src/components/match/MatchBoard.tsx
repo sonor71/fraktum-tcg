@@ -134,15 +134,16 @@ function getActionHint(
 
 function WillStrip({ player, label, side }: { player: MatchSide; label: string; side: "player" | "enemy" }) {
   const max = Math.max(1, player.maxWill);
-  const pct = clampPct(player.will, max);
+  const isHiddenEnemyWill = side === "enemy";
+  const pct = isHiddenEnemyWill ? 0 : clampPct(player.will, max);
 
   return (
-    <div className={`matchWillStrip is-${side}`} title={`${label} Will: ${player.will}/${max}`}>
+    <div className={`matchWillStrip is-${side}`} title={`${label} Will: ${isHiddenEnemyWill ? `hidden/${max}` : `${player.will}/${max}`}`}>
       <span className="matchWillLabel">{label} Will</span>
       <div className="matchWillTrack" aria-hidden="true">
         <span className="matchWillFill" style={{ width: `${pct}%` }} />
       </div>
-      <b>{player.will}/{max}</b>
+      <b>{isHiddenEnemyWill ? `?/${max}` : `${player.will}/${max}`}</b>
     </div>
   );
 }
