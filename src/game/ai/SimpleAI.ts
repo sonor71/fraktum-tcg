@@ -1,6 +1,8 @@
 import type { CardInstance, MatchState } from "../core/types";
 import { endTurn, playCard, rollD20 } from "../engine/MatchEngine";
 import {
+  canPlayerMakeAnyMove,
+  cardRequiresBoardSlot,
   getBestPlayableCard,
   getCardBoardMaxHp,
   getCardCost,
@@ -10,7 +12,7 @@ import {
   getPreferredFreeSlotIndex,
 } from "../engine/TurnManager";
 
-const AI_MAX_PLAYS_PER_TURN = 1;
+const AI_MAX_PLAYS_PER_TURN = 20;
 
 function addLog(state: MatchState, message: string): MatchState {
   return { ...state, log: [...state.log, message].slice(-80) };
@@ -89,7 +91,7 @@ export function runSimpleAI(state: MatchState): MatchState {
 
   let cardsPlayed = 0;
 
-  while (cardsPlayed < AI_MAX_PLAYS_PER_TURN) {
+  while (cardsPlayed < AI_MAX_PLAYS_PER_TURN && canPlayerMakeAnyMove(next, "enemy")) {
     const chosen = chooseAiCard(next);
     if (!chosen) {
       next = addLog(
@@ -101,18 +103,19 @@ export function runSimpleAI(state: MatchState): MatchState {
       break;
     }
 
-    const slotIndex = getPreferredFreeSlotIndex(next, "enemy");
-    if (slotIndex < 0) {
+    const requiresSlot = cardRequiresBoardSlot(chosen);
+    const slotIndex = requiresSlot ? getPreferredFreeSlotIndex(next, "enemy") : -1;
+    if (requiresSlot && slotIndex < 0) {
       next = addLog(next, "AI cannot play: no free board slots.");
       break;
     }
 
     const beforeWill = next.enemy.will;
-    next = playCard(next, "enemy", chosen.instanceId, {
+    next = playCard(next, "enemy", chosen.instanceId, requiresSlot ? {
       type: "slot",
       playerId: "enemy",
       slotIndex,
-    } as any);
+    } as any : undefined);
 
     if (!didCardLeaveHand(next, chosen.instanceId)) {
       next = addLog(next, `AI failed to play ${getCardTitle(chosen)}.`);

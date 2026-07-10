@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { GameAction } from "../../game/core/GameAction";
 import type { CardDefinition, CardInstance, StartMatchPayload } from "../../game/core/types";
 import { createInitialMatchState, dispatch } from "../../game/engine/MatchEngine";
+import { canPlayerMakeAnyMove, cardRequiresBoardSlot } from "../../game/engine/TurnManager";
 import { MatchBoard } from "./MatchBoard";
 import {
   getMatchRewardValues,
@@ -48,7 +49,6 @@ const AUTO_AI_DELAY_MS = 720;
 const FX_EVENT_TTL_MS = 920;
 const TRAVEL_EVENT_TTL_MS = 760;
 const TACTICAL_REVEAL_TTL_MS = 3200;
-const AUTO_PLAYER_END_AFTER_PLAY_MS = 980;
 const AUTO_PLAYER_PASS_EMPTY_MS = 860;
 const FX_LOG_LIMIT = 18;
 
@@ -184,12 +184,14 @@ function validatePlay(matchState: MatchStateSnapshot, cardInstanceId: string, sl
     return "Selected card is no longer in your hand.";
   }
 
-  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= matchState.board.playerSlots.length) {
-    return "Invalid target slot.";
-  }
+  if (cardRequiresBoardSlot(card)) {
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= matchState.board.playerSlots.length) {
+      return "Invalid target slot.";
+    }
 
-  if (matchState.board.playerSlots[slotIndex]) {
-    return `Slot ${slotIndex + 1} is occupied.`;
+    if (matchState.board.playerSlots[slotIndex]) {
+      return `Slot ${slotIndex + 1} is occupied.`;
+    }
   }
 
   const cost = getCardCost(card);
@@ -200,27 +202,11 @@ function validatePlay(matchState: MatchStateSnapshot, cardInstanceId: string, sl
   return null;
 }
 
-function hasFreePlayerSlot(matchState: MatchStateSnapshot) {
-  return matchState.board.playerSlots.some((slot) => !slot);
-}
 
 function hasPlayablePlayerCard(matchState: MatchStateSnapshot) {
-  if (matchState.winner) return false;
-  if (matchState.activePlayerId !== "player" || matchState.phase !== "main") return false;
-  if (!hasFreePlayerSlot(matchState)) return false;
-
-  return matchState.player.hand.some((card) => getCardCost(card) <= matchState.player.will);
+  return canPlayerMakeAnyMove(matchState, "player");
 }
 
-function didPlayerPlayCard(previous: MatchStateSnapshot | null, current: MatchStateSnapshot) {
-  if (!previous) return false;
-  if (previous.activePlayerId !== "player" || previous.phase !== "main") return false;
-  if (current.activePlayerId !== "player" || current.phase !== "main") return false;
-  if (current.winner) return false;
-
-  const previousIds = new Set(previous.player.hand.map((card) => card.instanceId));
-  return current.player.hand.some((card) => !previousIds.has(card.instanceId)) === false && current.player.hand.length < previous.player.hand.length;
-}
 
 function getTacticalRevealEvents(matchState: MatchStateSnapshot): TacticalRevealEvent[] {
   const record = matchState as unknown as Record<string, unknown>;
@@ -1041,17 +1027,15 @@ export default function MatchPage() {
   useEffect(() => {
     clearTimer(autoPlayerTurnTimer);
 
-    const previous = previousAutoFlowState.current;
     previousAutoFlowState.current = state;
 
     if (state.winner || state.activePlayerId !== "player" || state.phase !== "main") {
       return;
     }
 
-    const playedCard = didPlayerPlayCard(previous, state);
     const hasPlayableCard = hasPlayablePlayerCard(state);
 
-    if (!playedCard && hasPlayableCard) {
+    if (hasPlayableCard) {
       return;
     }
 
@@ -1059,8 +1043,9 @@ export default function MatchPage() {
       autoPlayerTurnTimer.current = null;
       const currentState = stateRef.current;
       if (currentState.winner || currentState.activePlayerId !== "player" || currentState.phase !== "main") return;
+      if (hasPlayablePlayerCard(currentState)) return;
       void submitGameAction({ type: "END_TURN", playerId: "player" } as GameAction);
-    }, playedCard ? AUTO_PLAYER_END_AFTER_PLAY_MS : AUTO_PLAYER_PASS_EMPTY_MS);
+    }, AUTO_PLAYER_PASS_EMPTY_MS);
 
     return () => {
       clearTimer(autoPlayerTurnTimer);
@@ -1143,6 +1128,10 @@ export default function MatchPage() {
 
   const mergedLog = useMemo(() => [...state.log, ...uiLog].slice(-18), [state.log, uiLog]);
 
+  const onlineOpponent = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
+  const opponentDisplayName = isOnlineMode ? onlineOpponent?.playerName ?? "Opponent" : null;
+  const opponentRankLabel = isOnlineMode ? `RANK ${onlineOpponent?.level ?? "III"}` : null;
+
   if (isOnlineMode && onlineQueueState !== "matched") {
     return (
       <main className="matchPage onlineMatchmakingPage">
@@ -1210,6 +1199,9 @@ export default function MatchPage() {
         fxEvents={fxEvents}
         cardTravelEvents={cardTravelEvents}
         tacticalRevealEvents={tacticalRevealEvents}
+        matchMode={matchMode}
+        opponentName={opponentDisplayName}
+        opponentRankLabel={opponentRankLabel}
       />
     </main>
   );

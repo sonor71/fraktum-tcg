@@ -1,5 +1,6 @@
 import type { CardInstance, MatchState, PlayerId, TargetRef } from "../core/types";
 import { rollDie } from "./Random";
+import { resolveCaduceusBattleDraw } from "./MatchEngine";
 import {
   getCardBoardMaxHp,
   getCardCurrentHp,
@@ -189,7 +190,7 @@ function appendRevealEvent(
   const previous = Array.isArray(record.tacticalRevealEvents) ? record.tacticalRevealEvents as TacticalRevealEvent[] : [];
   const nextEvent: TacticalRevealEvent = {
     ...event,
-    id: `reveal_${Date.now()}_${previous.length}_${Math.floor(Math.random() * 10000)}`,
+    id: `reveal_${state.rngSeed}_${previous.length}`,
     createdAt: Date.now(),
   };
 
@@ -855,7 +856,7 @@ function stealAndCastRandom(state: MatchState, playerId: PlayerId, sourceName: s
 }
 
 function forceDrawMatch(state: MatchState, sourceName: string): MatchState {
-  return log({ ...state, phase: "ended", winner: "draw" as any }, `${sourceName} forced an automatic draw.`);
+  return resolveCaduceusBattleDraw(state, sourceName);
 }
 
 function roulette(state: MatchState, playerId: PlayerId, sourceName: string) {
