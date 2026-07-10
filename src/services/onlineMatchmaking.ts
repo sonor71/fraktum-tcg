@@ -1,5 +1,10 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { requireSupabase, supabase, isSupabaseConfigured } from "./supabaseClient";
+import {
+  requireSupabase,
+  supabase,
+  isSupabaseConfigured,
+  syncSupabaseSessionFromLauncher,
+} from "./supabaseClient";
 import type { CardDefinition } from "../game/core/types";
 import type { WillMatchStats } from "../useGameStore";
 
@@ -16,7 +21,12 @@ export type OnlinePlayerSnapshot = {
   createdAt: string;
 };
 
-export type OnlineMatchRoomStatus = "waiting" | "ready" | "playing" | "finished" | "cancelled";
+export type OnlineMatchRoomStatus =
+  | "waiting"
+  | "ready"
+  | "playing"
+  | "finished"
+  | "cancelled";
 
 export type OnlineMatchRoom = {
   id: string;
@@ -41,20 +51,63 @@ export type OnlineMatchmakingResult = {
   userId: string;
 };
 
+function getErrorText(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String((error as { message?: unknown }).message ?? error);
+  }
+  return String(error);
+}
+
+function onlineBackendError(error: unknown, context: string) {
+  const message = getErrorText(error);
+
+  if (
+    message.includes("join_online_matchmaking") ||
+    message.includes("PGRST202") ||
+    message.includes("Could not find the function")
+  ) {
+    return new Error(
+      `${context}: FRAKTUM backend SQL is not installed in Supabase. Run supabase/fraktum_online_backend.sql.`,
+    );
+  }
+
+  if (message.toLowerCase().includes("row-level security")) {
+    return new Error(
+      `${context}: Supabase RLS blocked the request. Re-run fraktum_online_backend.sql.`,
+    );
+  }
+
+  return new Error(`${context}: ${message}`);
+}
+
 function normalizeRoom(data: unknown): OnlineMatchRoom {
   const record = data as Record<string, unknown> | null;
-  if (!record || typeof record.id !== "string") {
+  if (!record || typeof record.id !== "string" || !record.id) {
     throw new Error("Supabase returned an invalid online match room.");
   }
 
+  const rawStatus = String(record.status || "waiting");
+  const status: OnlineMatchRoomStatus =
+    rawStatus === "ready" ||
+    rawStatus === "playing" ||
+    rawStatus === "finished" ||
+    rawStatus === "cancelled"
+      ? rawStatus
+      : "waiting";
+
   return {
-    id: String(record.id),
-    status: String(record.status || "waiting") as OnlineMatchRoomStatus,
+    id: record.id,
+    status,
     seed: Number(record.seed || Date.now()),
     player_a_user_id: String(record.player_a_user_id || ""),
-    player_b_user_id: typeof record.player_b_user_id === "string" ? record.player_b_user_id : null,
+    player_b_user_id:
+      typeof record.player_b_user_id === "string"
+        ? record.player_b_user_id
+        : null,
     player_a_snapshot: record.player_a_snapshot as OnlinePlayerSnapshot,
-    player_b_snapshot: (record.player_b_snapshot ?? null) as OnlinePlayerSnapshot | null,
+    player_b_snapshot:
+      (record.player_b_snapshot ?? null) as OnlinePlayerSnapshot | null,
     player_a_ready: Boolean(record.player_a_ready),
     player_b_ready: Boolean(record.player_b_ready),
     match_state: record.match_state,
@@ -65,12 +118,33 @@ function normalizeRoom(data: unknown): OnlineMatchRoom {
   };
 }
 
+async function requireAuthenticatedUser() {
+  const client = requireSupabase();
+  await syncSupabaseSessionFromLauncher();
+
+  const { data, error } = await client.auth.getUser();
+  if (error) throw error;
+
+  if (!data.user) {
+    throw new Error(
+      "You must log in through Profile → FRAKTUM Cloud before searching for an online match.",
+    );
+  }
+
+  return { client, user: data.user };
+}
+
 export function isOnlineMatchmakingConfigured() {
   return isSupabaseConfigured() && Boolean(supabase);
 }
 
-export function getSeatForRoom(room: OnlineMatchRoom, userId: string): OnlineSeat {
-  return room.player_a_user_id === userId ? "a" : "b";
+export function getSeatForRoom(
+  room: OnlineMatchRoom,
+  userId: string,
+): OnlineSeat {
+  if (room.player_a_user_id === userId) return "a";
+  if (room.player_b_user_id === userId) return "b";
+  throw new Error("Authenticated user is not a participant of this room.");
 }
 
 export function getOwnSnapshot(room: OnlineMatchRoom, seat: OnlineSeat) {
@@ -84,77 +158,111 @@ export function getOpponentSnapshot(room: OnlineMatchRoom, seat: OnlineSeat) {
 export function isRoomReady(room: OnlineMatchRoom) {
   return Boolean(
     room &&
-    (room.status === "ready" || room.status === "playing") &&
-    room.player_a_snapshot &&
-    room.player_b_snapshot &&
-    room.player_a_user_id &&
-    room.player_b_user_id,
+      (room.status === "ready" || room.status === "playing") &&
+      room.player_a_snapshot &&
+      room.player_b_snapshot &&
+      room.player_a_user_id &&
+      room.player_b_user_id &&
+      room.player_a_ready &&
+      room.player_b_ready,
   );
 }
 
-export async function joinOnlineMatchmaking(snapshot: OnlinePlayerSnapshot): Promise<OnlineMatchmakingResult> {
-  const client = requireSupabase();
-  const { data: userData, error: userError } = await client.auth.getUser();
-  if (userError) throw userError;
+export async function joinOnlineMatchmaking(
+  snapshot: OnlinePlayerSnapshot,
+): Promise<OnlineMatchmakingResult> {
+  try {
+    const { client, user } = await requireAuthenticatedUser();
 
-  const user = userData.user;
-  if (!user) {
-    throw new Error("You must login in Profile before searching for an online match.");
+    const playerSnapshot: OnlinePlayerSnapshot = {
+      ...snapshot,
+      userId: user.id,
+      playerName: snapshot.playerName || user.email || "FRAKTUM Player",
+      createdAt: new Date().toISOString(),
+    };
+
+    const { data, error } = await client.rpc("join_online_matchmaking", {
+      player_snapshot: playerSnapshot,
+    });
+
+    if (error) throw error;
+
+    const room = normalizeRoom(Array.isArray(data) ? data[0] : data);
+
+    return {
+      room,
+      seat: getSeatForRoom(room, user.id),
+      userId: user.id,
+    };
+  } catch (error) {
+    throw onlineBackendError(error, "Matchmaking failed");
   }
-
-  const playerSnapshot: OnlinePlayerSnapshot = {
-    ...snapshot,
-    userId: user.id,
-    playerName: snapshot.playerName || user.email || "FRAKTUM Player",
-    createdAt: new Date().toISOString(),
-  };
-
-  const { data, error } = await client.rpc("join_online_matchmaking", {
-    player_snapshot: playerSnapshot,
-  });
-
-  if (error) throw error;
-
-  const room = normalizeRoom(Array.isArray(data) ? data[0] : data);
-  return {
-    room,
-    seat: getSeatForRoom(room, user.id),
-    userId: user.id,
-  };
 }
 
 export async function fetchOnlineMatchRoom(roomId: string) {
-  const client = requireSupabase();
-  const { data, error } = await client
-    .from("online_match_rooms")
-    .select("*")
-    .eq("id", roomId)
-    .maybeSingle();
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("online_match_rooms")
+      .select("*")
+      .eq("id", roomId)
+      .maybeSingle();
 
-  if (error) throw error;
-  return data ? normalizeRoom(data) : null;
+    if (error) throw error;
+    return data ? normalizeRoom(data) : null;
+  } catch (error) {
+    throw onlineBackendError(error, "Could not read online room");
+  }
 }
 
 export async function cancelOnlineMatchmaking(roomId: string) {
-  const client = requireSupabase();
-  const { error } = await client.rpc("cancel_online_matchmaking", {
-    room_id: roomId,
-  });
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc("cancel_online_matchmaking", {
+      room_id: roomId,
+    });
 
-  if (error) throw error;
+    if (error) throw error;
+    return data ? normalizeRoom(Array.isArray(data) ? data[0] : data) : null;
+  } catch (error) {
+    throw onlineBackendError(error, "Could not cancel matchmaking");
+  }
 }
 
 export async function markOnlineRoomPlaying(roomId: string) {
-  const client = requireSupabase();
-  const { data, error } = await client
-    .from("online_match_rooms")
-    .update({ status: "playing", updated_at: new Date().toISOString() })
-    .eq("id", roomId)
-    .select("*")
-    .maybeSingle();
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from("online_match_rooms")
+      .update({ status: "playing" })
+      .eq("id", roomId)
+      .in("status", ["ready", "playing"])
+      .select("*")
+      .maybeSingle();
 
-  if (error) throw error;
-  return data ? normalizeRoom(data) : null;
+    if (error) throw error;
+    return data ? normalizeRoom(data) : null;
+  } catch (error) {
+    throw onlineBackendError(error, "Could not start online room");
+  }
+}
+
+export async function finishOnlineMatch(
+  roomId: string,
+  winnerValue: string | null,
+) {
+  try {
+    const client = requireSupabase();
+    const { data, error } = await client.rpc("finish_online_match", {
+      room_id: roomId,
+      winner_value: winnerValue,
+    });
+
+    if (error) throw error;
+    return data ? normalizeRoom(Array.isArray(data) ? data[0] : data) : null;
+  } catch (error) {
+    throw onlineBackendError(error, "Could not finish online room");
+  }
 }
 
 export function subscribeToOnlineMatchRoom(
@@ -164,7 +272,8 @@ export function subscribeToOnlineMatchRoom(
 ) {
   if (!supabase) return () => undefined;
 
-  let channel: RealtimeChannel | null = supabase
+  const client = supabase;
+  let channel: RealtimeChannel | null = client
     .channel(`online_match_room:${roomId}`)
     .on(
       "postgres_changes",
@@ -185,12 +294,16 @@ export function subscribeToOnlineMatchRoom(
     )
     .subscribe((status, error) => {
       if (error) onError?.(error);
-      if (status === "CHANNEL_ERROR") onError?.(new Error("Supabase Realtime channel error."));
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        onError?.(
+          new Error(`Supabase room Realtime channel status: ${status}`),
+        );
+      }
     });
 
   return () => {
-    if (!channel || !supabase) return;
-    void supabase.removeChannel(channel);
+    if (!channel) return;
+    void client.removeChannel(channel);
     channel = null;
   };
 }

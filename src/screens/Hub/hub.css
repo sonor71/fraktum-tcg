@@ -546,3 +546,63 @@ margin: 0 auto;
 .hubWorldTopOverlay {
   display: none !important;
 }
+
+/* =========================================================
+   HUB ONLINE PRESENCE
+   ========================================================= */
+
+.hubRemotePlayerAnchor {
+  z-index: 34;
+}
+
+.hubRemotePlayerVisual {
+  opacity: 0.92;
+  filter: drop-shadow(0 0 18px rgba(255, 218, 128, 0.24));
+}
+
+.hubRemotePlayerName,
+.hubRemotePlayerDebug {
+  position: absolute;
+  left: 55px;
+  z-index: 70;
+  width: max-content;
+  max-width: 210px;
+  transform: translate(-50%, -100%);
+  pointer-events: none;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.hubRemotePlayerName {
+  top: 6px;
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 218, 128, 0.36);
+  border-radius: 999px;
+  color: #fff7d1;
+  background: linear-gradient(145deg, rgba(9, 12, 22, 0.88), rgba(61, 37, 98, 0.72));
+  box-shadow: 0 0 22px rgba(255, 207, 102, 0.14), 0 8px 22px rgba(0, 0, 0, 0.38);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.76);
+}
+
+.hubRemotePlayerName small {
+  color: rgba(204, 237, 255, 0.72);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.hubRemotePlayerDebug {
+  top: 34px;
+  padding: 4px 7px;
+  border: 1px solid rgba(66, 239, 255, 0.42);
+  border-radius: 999px;
+  color: #bff8ff;
+  background: rgba(2, 5, 12, 0.82);
+  font-size: 10px;
+  font-weight: 850;
+}

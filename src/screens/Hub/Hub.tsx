@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PlayerSprite from "./PlayerSprite";
+import { useHubPresence } from "../../services/hubPresence";
+import { useGameStore } from "../../useGameStore";
 import "./hub.css";
 import {
   HUB_MAPS,
@@ -92,6 +94,9 @@ function getNextZoneId(prefix: string, zones: { id: string }[]) {
 export default function Hub() {
   const navigate = useNavigate();
   const mapLayerRef = useRef<HTMLDivElement | null>(null);
+  const playerName = useGameStore((state) => state.playerName);
+  const avatar = useGameStore((state) => state.avatar);
+  const level = useGameStore((state) => state.level);
   const [currentMapId, setCurrentMapId] = useState<HubMapId>("hub1");
   const [spawnPoint, setSpawnPoint] = useState<HubPoint>(HUB_MAPS.hub1.spawnPoint);
   const [mapDimensions, setMapDimensions] = useState({ width: HUB_MAPS.hub1.width, height: HUB_MAPS.hub1.height });
@@ -122,6 +127,21 @@ export default function Hub() {
     resetPosition,
     mapTransform,
   } = useHubMovement(editableCurrentMap, mapDimensions, spawnPoint);
+
+  const {
+    presenceStatus,
+    presenceError,
+    remotePlayers,
+    allRemotePlayers,
+  } = useHubPresence({
+    mapId: currentMapId,
+    playerName,
+    avatar,
+    level,
+    position,
+    direction,
+    isMoving,
+  });
 
   const nearbyExit = useMemo(() => {
     return currentMap.exits.find((exit) => distance(position, exit) <= exit.radius);
@@ -473,9 +493,39 @@ export default function Hub() {
             />
           ) : null}
 
+          {remotePlayers.map((remotePlayer) => {
+            const remoteCollisionRect = getPlayerCollisionRect(remotePlayer);
+            const isRemoteOccluded = currentOcclusionZones.some((zone) => rectanglesOverlap(remoteCollisionRect, zone));
+
+            return (
+              <div
+                key={remotePlayer.clientId}
+                className="hubPlayerAnchor hubRemotePlayerAnchor"
+                style={{
+                  left: remotePlayer.x,
+                  top: remotePlayer.y,
+                  zIndex: 30 + Math.round(remotePlayer.y),
+                }}
+              >
+                <div className={`hubPlayerVisual hubRemotePlayerVisual ${isRemoteOccluded ? "is-occluded" : ""}`}>
+                  <PlayerSprite direction={remotePlayer.direction} isMoving={remotePlayer.isMoving} />
+                </div>
+                <div className="hubRemotePlayerName">
+                  {remotePlayer.playerName}
+                  <small>LVL {remotePlayer.level}</small>
+                </div>
+                {debugMode ? (
+                  <div className="hubRemotePlayerDebug">
+                    x:{Math.round(remotePlayer.x)} y:{Math.round(remotePlayer.y)} · {remotePlayer.mapId}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+
           <div
             className="hubPlayerAnchor"
-            style={{ left: position.x, top: position.y }}
+            style={{ left: position.x, top: position.y, zIndex: 40 + Math.round(position.y) }}
           >
             <div className="hubPlayerLocator" aria-hidden="true" />
             <div className={`hubPlayerVisual ${isPlayerOccluded ? "is-occluded" : ""}`}>
@@ -506,6 +556,8 @@ export default function Hub() {
           <span>Map: {currentMap.id} ({mapDimensions.width}×{mapDimensions.height})</span>
           <span>Player: x {position.x.toFixed(1)}, y {position.y.toFixed(1)}</span>
           <span>Camera: x {camera.x.toFixed(1)}, y {camera.y.toFixed(1)}</span>
+          <span>Online hub: {presenceStatus} · Same map: {remotePlayers.length} · Total remote: {allRemotePlayers.length}</span>
+          {presenceError ? <span>Online error: {presenceError}</span> : null}
           <span>Colliders: {currentColliders.length} · Occlusion: {currentOcclusionZones.length}</span>
           <span>Press H editor · C colliders · O occlusion</span>
           {editorEnabled ? (

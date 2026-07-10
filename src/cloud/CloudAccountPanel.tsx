@@ -1,241 +1,458 @@
-import { useEffect, useMemo, useState } from "react";
 import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+} from "react";
+import {
+  CLOUD_AUTOSYNC_CHANGED_EVENT,
   getCloudAuthState,
   getCloudSaveMeta,
   isCloudAutoSyncEnabled,
-  isCloudAutoSyncEnabled as readAutoSync,
   onCloudAuthStateChange,
   pullCloudSaveToLocal,
   pushLocalSaveToCloud,
+  requestCloudEmailCode,
   setCloudAutoSyncEnabled,
-  signInCloud,
   signOutCloud,
-  signUpCloud,
+  verifyCloudEmailCode,
+  type CloudAuthState,
   type CloudSaveMeta,
 } from "../services/fraktumCloudSync";
-import type { FraktumCloudUser } from "../services/supabaseClient";
 import { useGameStore } from "../useGameStore";
-import "./CloudAccountPanel.css";
-
-type CloudMode = "login" | "register";
-
-type NoticeKind = "idle" | "ok" | "warn" | "error";
-
-function formatDate(value: string | null | undefined) {
-  if (!value) return "нет облачного сейва";
-  try {
-    return new Intl.DateTimeFormat("ru-RU", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return value;
-  }
-}
 
 function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "Unknown Supabase error.";
+  return error instanceof Error ? error.message : String(error);
 }
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("ru-RU");
+}
+
+function normalizeCode(value: string) {
+  return value.replace(/\D/g, "").slice(0, 8);
+}
+
+const panelStyle: CSSProperties = {
+  display: "grid",
+  gap: 16,
+  padding: 18,
+  border: "1px solid rgba(149, 228, 255, 0.16)",
+  borderRadius: 22,
+  background:
+    "linear-gradient(145deg, rgba(255,255,255,0.07), rgba(255,255,255,0.025)), rgba(3, 8, 15, 0.72)",
+  boxShadow: "0 18px 48px rgba(0,0,0,0.32)",
+};
+
+const rowStyle: CSSProperties = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  alignItems: "center",
+};
+
+const stepStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  padding: 14,
+  border: "1px solid rgba(145, 224, 255, 0.12)",
+  borderRadius: 16,
+  background: "rgba(2, 8, 15, 0.42)",
+};
+
+const stepTitleStyle: CSSProperties = {
+  color: "#eaf8ff",
+  fontSize: 13,
+  fontWeight: 900,
+  letterSpacing: "0.05em",
+};
+
+const inputStyle: CSSProperties = {
+  minWidth: 220,
+  minHeight: 44,
+  padding: "0 12px",
+  border: "1px solid rgba(145, 224, 255, 0.18)",
+  borderRadius: 12,
+  color: "#eff9ff",
+  background: "rgba(3, 9, 17, 0.88)",
+  outline: "none",
+};
+
+const codeInputStyle: CSSProperties = {
+  ...inputStyle,
+  width: 220,
+  minWidth: 220,
+  fontSize: 22,
+  fontWeight: 900,
+  letterSpacing: "0.24em",
+  textAlign: "center",
+};
+
+const buttonStyle: CSSProperties = {
+  minHeight: 44,
+  padding: "0 14px",
+  border: "1px solid rgba(138, 225, 255, 0.22)",
+  borderRadius: 12,
+  color: "#edf9ff",
+  background:
+    "linear-gradient(180deg, rgba(46, 120, 153, 0.64), rgba(41, 24, 94, 0.82))",
+  fontWeight: 900,
+  cursor: "pointer",
+};
+
+const ghostButtonStyle: CSSProperties = {
+  ...buttonStyle,
+  background:
+    "linear-gradient(180deg, rgba(31, 49, 68, 0.72), rgba(7, 14, 23, 0.9))",
+};
+
+const mutedStyle: CSSProperties = {
+  color: "rgba(229, 242, 252, 0.68)",
+  fontSize: 12,
+  lineHeight: 1.45,
+};
 
 export function CloudAccountPanel() {
   const playerName = useGameStore((state) => state.playerName);
-  const level = useGameStore((state) => state.level);
-  const coins = useGameStore((state) => state.coins);
-  const premium = useGameStore((state) => state.premium);
-  const ownedCards = useGameStore((state) => state.ownedCards);
-  const deckIds = useGameStore((state) => state.deckIds);
 
-  const [configured, setConfigured] = useState(true);
-  const [user, setUser] = useState<FraktumCloudUser | null>(null);
-  const [mode, setMode] = useState<CloudMode>("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState(playerName);
+  const [authState, setAuthState] = useState<CloudAuthState>({
+    configured: false,
+    user: null,
+  });
+  const [saveMeta, setSaveMeta] = useState<CloudSaveMeta | null>(null);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [meta, setMeta] = useState<CloudSaveMeta | null>(null);
-  const [autoSync, setAutoSync] = useState(() => readAutoSync());
-  const [noticeKind, setNoticeKind] = useState<NoticeKind>("idle");
-  const [notice, setNotice] = useState("Supabase не подключён к этой вкладке.");
+  const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState(playerName || "");
+  const [sentEmail, setSentEmail] = useState("");
+  const [codeRequested, setCodeRequested] = useState(false);
+  const [code, setCode] = useState("");
+  const [message, setMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [autoSync, setAutoSync] = useState(isCloudAutoSyncEnabled());
+  const codeInputRef = useRef<HTMLInputElement | null>(null);
 
-  const localSummary = useMemo(() => ({
-    level,
-    coins,
-    premium,
-    cards: ownedCards.length,
-    deck: deckIds.length,
-  }), [coins, deckIds.length, level, ownedCards.length, premium]);
+  const accountEmail = authState.user?.email ?? "";
+  const currentEmail = useMemo(
+    () => (sentEmail || email).trim().toLowerCase(),
+    [email, sentEmail],
+  );
 
-  const refreshCloudState = async () => {
-    const auth = await getCloudAuthState();
-    setConfigured(auth.configured);
-    setUser(auth.user);
+  async function refresh() {
+    setLoading(true);
+    setErrorMessage("");
 
-    if (!auth.configured) {
-      setNoticeKind("warn");
-      setNotice("Добавь VITE_SUPABASE_URL и VITE_SUPABASE_ANON_KEY в .env.local, затем перезапусти dev-сервер.");
-      return;
+    try {
+      const nextAuthState = await getCloudAuthState();
+      setAuthState(nextAuthState);
+
+      if (nextAuthState.user) {
+        setSaveMeta(await getCloudSaveMeta().catch(() => null));
+      } else {
+        setSaveMeta(null);
+      }
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setLoading(false);
     }
-
-    if (!auth.user) {
-      setMeta(null);
-      setNoticeKind("idle");
-      setNotice("Войди в Supabase-аккаунт, чтобы сохранять карты, монеты, уровень и колоду в облаке.");
-      return;
-    }
-
-    const cloudMeta = await getCloudSaveMeta();
-    setMeta(cloudMeta);
-    setNoticeKind(cloudMeta?.hasSave ? "ok" : "warn");
-    setNotice(cloudMeta?.hasSave ? `Облачный сейв найден. Revision ${cloudMeta.revision ?? 0}.` : "Аккаунт есть, но облачного сейва ещё нет. Нажми Upload local save.");
-  };
+  }
 
   useEffect(() => {
-    refreshCloudState().catch((error) => {
-      setNoticeKind("error");
-      setNotice(getErrorMessage(error));
-    });
+    void refresh();
 
     const unsubscribe = onCloudAuthStateChange(() => {
-      refreshCloudState().catch((error) => {
-        setNoticeKind("error");
-        setNotice(getErrorMessage(error));
-      });
+      void refresh();
     });
 
-    return unsubscribe;
+    const handleAutoSyncChange = () => {
+      setAutoSync(isCloudAutoSyncEnabled());
+    };
+
+    window.addEventListener(
+      CLOUD_AUTOSYNC_CHANGED_EVENT,
+      handleAutoSyncChange,
+    );
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener(
+        CLOUD_AUTOSYNC_CHANGED_EVENT,
+        handleAutoSyncChange,
+      );
+    };
   }, []);
 
-  const runCloudAction = async (action: () => Promise<void>) => {
+  useEffect(() => {
+    if (!displayName && playerName) setDisplayName(playerName);
+  }, [displayName, playerName]);
+
+  async function runCloudAction(action: () => Promise<void>) {
     setBusy(true);
+    setMessage("");
+    setErrorMessage("");
+
     try {
       await action();
-      await refreshCloudState();
     } catch (error) {
-      setNoticeKind("error");
-      setNotice(getErrorMessage(error));
+      setErrorMessage(getErrorMessage(error));
     } finally {
       setBusy(false);
     }
-  };
+  }
 
-  const handleAuthSubmit = () => runCloudAction(async () => {
-    if (mode === "login") {
-      await signInCloud(email, password);
-      setNoticeKind("ok");
-      setNotice("Вход выполнен. Теперь можно загрузить или отправить сейв.");
-    } else {
-      await signUpCloud(email, password, displayName || playerName);
-      setNoticeKind("ok");
-      setNotice("Аккаунт создан. Если Supabase требует email-confirmation, подтверди почту.");
-    }
-  });
+  function handleRequestCode() {
+    void runCloudAction(async () => {
+      const result = await requestCloudEmailCode(email, displayName);
+      setSentEmail(result.email);
+      setCodeRequested(true);
+      setCode("");
+      setMessage(
+        `Код отправлен на ${result.email}. Введи его в поле «Код из письма» ниже.`,
+      );
 
-  const handleUpload = () => runCloudAction(async () => {
-    const result = await pushLocalSaveToCloud();
-    setAutoSync(isCloudAutoSyncEnabled());
-    setNoticeKind("ok");
-    setNotice(`Локальный профиль загружен в облако. Revision ${result.revision}.`);
-  });
+      window.setTimeout(() => {
+        codeInputRef.current?.focus();
+      }, 0);
+    });
+  }
 
-  const handleDownload = () => runCloudAction(async () => {
-    const result = await pullCloudSaveToLocal();
-    setNoticeKind("ok");
-    setNotice(`Облачный профиль применён. Revision ${result.revision ?? 0}.`);
-  });
+  function handleVerifyCode(event?: FormEvent) {
+    event?.preventDefault();
 
-  const handleSignOut = () => runCloudAction(async () => {
-    await signOutCloud();
-    setMeta(null);
-    setUser(null);
-    setAutoSync(false);
-    setNoticeKind("idle");
-    setNotice("Выход выполнен.");
-  });
+    void runCloudAction(async () => {
+      if (!currentEmail) {
+        throw new Error("Сначала укажи почту и запроси код.");
+      }
 
-  const toggleAutoSync = () => {
+      if (!code.trim()) {
+        throw new Error("Введи код из письма.");
+      }
+
+      await verifyCloudEmailCode(currentEmail, code, displayName);
+      setCode("");
+      setCodeRequested(false);
+      setMessage("Вход выполнен. Аккаунт FRAKTUM подключён.");
+      await refresh();
+    });
+  }
+
+  function handleSignOut() {
+    void runCloudAction(async () => {
+      await signOutCloud();
+      setMessage("Вы вышли из FRAKTUM Cloud.");
+      await refresh();
+    });
+  }
+
+  function handlePushSave() {
+    void runCloudAction(async () => {
+      const result = await pushLocalSaveToCloud();
+      setMessage(
+        `Локальный прогресс загружен в облако. Revision ${result.revision}.`,
+      );
+      setSaveMeta(await getCloudSaveMeta().catch(() => null));
+    });
+  }
+
+  function handlePullSave() {
+    void runCloudAction(async () => {
+      const result = await pullCloudSaveToLocal();
+      setMessage(
+        `Облачный прогресс загружен. Revision ${result.revision ?? "—"}.`,
+      );
+      setSaveMeta(await getCloudSaveMeta().catch(() => null));
+    });
+  }
+
+  function handleToggleAutoSync() {
     const next = !autoSync;
     setCloudAutoSyncEnabled(next);
     setAutoSync(next);
-    setNoticeKind(next ? "ok" : "warn");
-    setNotice(next ? "Auto-sync включён. Изменения локального профиля будут отправляться в Supabase." : "Auto-sync выключен.");
-  };
+    setMessage(
+      next
+        ? "Автосинхронизация включена."
+        : "Автосинхронизация выключена.",
+    );
+  }
 
-  return (
-    <div className="cloudAccountPanel">
-      <div className="cloudAccountHead">
-        <div>
-          <span>Supabase account</span>
-          <strong>{user ? user.email ?? user.id : configured ? "Not signed in" : "Not configured"}</strong>
-        </div>
-        <i className={`cloudStatusDot ${user ? "is-online" : configured ? "is-idle" : "is-offline"}`} />
-      </div>
+  if (loading) {
+    return (
+      <section style={panelStyle}>
+        <strong>FRAKTUM Cloud</strong>
+        <span style={mutedStyle}>Проверка аккаунта...</span>
+      </section>
+    );
+  }
 
-      <div className="cloudLocalSummary" aria-label="Local save summary">
-        <span>LVL <b>{localSummary.level}</b></span>
-        <span>COINS <b>{localSummary.coins}</b></span>
-        <span>PREMIUM <b>{localSummary.premium}</b></span>
-        <span>CARDS <b>{localSummary.cards}</b></span>
-        <span>DECK <b>{localSummary.deck}</b></span>
-      </div>
+  if (!authState.configured) {
+    return (
+      <section style={panelStyle}>
+        <strong>FRAKTUM Cloud</strong>
+        <span style={mutedStyle}>
+          Supabase не настроен. Добавь VITE_SUPABASE_URL и
+          VITE_SUPABASE_ANON_KEY в .env/.env.local и в Vercel Environment
+          Variables, затем пересобери проект.
+        </span>
+      </section>
+    );
+  }
 
-      <p className={`cloudNotice is-${noticeKind}`}>{notice}</p>
-
-      {!configured ? (
-        <div className="cloudSetupBox">
-          <b>Нужно создать .env.local</b>
-          <code>VITE_SUPABASE_URL=...</code>
-          <code>VITE_SUPABASE_ANON_KEY=...</code>
-          <small>Service role key сюда не вставлять.</small>
-        </div>
-      ) : null}
-
-      {configured && !user ? (
-        <div className="cloudAuthForm">
-          <div className="cloudModeTabs">
-            <button className={mode === "login" ? "is-active" : ""} type="button" onClick={() => setMode("login")}>Login</button>
-            <button className={mode === "register" ? "is-active" : ""} type="button" onClick={() => setMode("register")}>Register</button>
+  if (authState.user) {
+    return (
+      <section style={panelStyle}>
+        <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+          <div>
+            <strong>FRAKTUM Cloud подключён</strong>
+            <div style={mutedStyle}>{accountEmail}</div>
           </div>
-
-          {mode === "register" ? (
-            <label>
-              <span>Nickname</span>
-              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="FRAKTUM name" />
-            </label>
-          ) : null}
-
-          <label>
-            <span>Email</span>
-            <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" autoComplete="email" />
-          </label>
-
-          <label>
-            <span>Password</span>
-            <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="min 6 characters" type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} />
-          </label>
-
-          <button className="cloudPrimaryBtn" type="button" disabled={busy || email.trim().length < 3 || password.length < 6} onClick={handleAuthSubmit}>
-            {busy ? "Working..." : mode === "login" ? "Login" : "Create account"}
+          <button
+            type="button"
+            style={ghostButtonStyle}
+            onClick={handleSignOut}
+            disabled={busy}
+          >
+            Выйти
           </button>
         </div>
-      ) : null}
 
-      {configured && user ? (
-        <div className="cloudSyncActions">
-          <div className="cloudMetaRow">
-            <span>Cloud save</span>
-            <b>{formatDate(meta?.updatedAt)}</b>
-          </div>
-
-          <button type="button" disabled={busy} onClick={handleUpload}>Upload local save</button>
-          <button type="button" disabled={busy || !meta?.hasSave} onClick={handleDownload}>Download cloud save</button>
-          <button type="button" disabled={busy} onClick={toggleAutoSync}>{autoSync ? "Disable auto-sync" : "Enable auto-sync"}</button>
-          <button className="cloudDangerBtn" type="button" disabled={busy} onClick={handleSignOut}>Sign out</button>
+        <div style={rowStyle}>
+          <button
+            type="button"
+            style={buttonStyle}
+            onClick={handlePushSave}
+            disabled={busy}
+          >
+            Загрузить прогресс в облако
+          </button>
+          <button
+            type="button"
+            style={ghostButtonStyle}
+            onClick={handlePullSave}
+            disabled={busy || !saveMeta?.hasSave}
+          >
+            Скачать прогресс из облака
+          </button>
+          <button
+            type="button"
+            style={ghostButtonStyle}
+            onClick={handleToggleAutoSync}
+            disabled={busy}
+          >
+            Autosync: {autoSync ? "ON" : "OFF"}
+          </button>
         </div>
+
+        <span style={mutedStyle}>
+          Cloud save:{" "}
+          {saveMeta?.hasSave
+            ? `revision ${saveMeta.revision ?? "—"}, ${formatDate(saveMeta.updatedAt)}`
+            : "пока нет сохранения"}
+        </span>
+
+        {message ? (
+          <span style={{ ...mutedStyle, color: "#baffdd" }}>{message}</span>
+        ) : null}
+        {errorMessage ? (
+          <span style={{ ...mutedStyle, color: "#ffb3b3" }}>
+            {errorMessage}
+          </span>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <section style={panelStyle}>
+      <div>
+        <strong>Вход в FRAKTUM Cloud</strong>
+        <div style={mutedStyle}>
+          Пароль не нужен. Сначала запроси код, затем введи его во втором поле.
+        </div>
+      </div>
+
+      <div style={stepStyle}>
+        <div style={stepTitleStyle}>ШАГ 1 — ПОЛУЧИТЬ КОД</div>
+        <div style={rowStyle}>
+          <input
+            style={inputStyle}
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (sentEmail && event.target.value.trim() !== sentEmail) {
+                setCodeRequested(false);
+                setSentEmail("");
+                setCode("");
+              }
+            }}
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="email@example.com"
+            disabled={busy}
+          />
+          <input
+            style={inputStyle}
+            value={displayName}
+            onChange={(event) => setDisplayName(event.target.value)}
+            placeholder="Ник игрока"
+            disabled={busy}
+          />
+          <button
+            type="button"
+            style={buttonStyle}
+            onClick={handleRequestCode}
+            disabled={busy || !email.trim()}
+          >
+            {codeRequested ? "Отправить код ещё раз" : "Получить код"}
+          </button>
+        </div>
+      </div>
+
+      <form style={stepStyle} onSubmit={handleVerifyCode}>
+        <div style={stepTitleStyle}>ШАГ 2 — ВВЕСТИ КОД ИЗ ПИСЬМА</div>
+        <div style={mutedStyle}>
+          {codeRequested
+            ? `Код отправлен на ${sentEmail}. Вставь его в поле ниже.`
+            : "Поле уже доступно. После отправки письма введи сюда полученный код."}
+        </div>
+        <div style={rowStyle}>
+          <input
+            ref={codeInputRef}
+            style={codeInputStyle}
+            value={code}
+            onChange={(event) => setCode(normalizeCode(event.target.value))}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]*"
+            placeholder="000000"
+            aria-label="Код из письма"
+            disabled={busy}
+          />
+          <button
+            type="submit"
+            style={buttonStyle}
+            disabled={busy || !code.trim() || !currentEmail}
+          >
+            Подтвердить код и войти
+          </button>
+        </div>
+      </form>
+
+      {message ? (
+        <span style={{ ...mutedStyle, color: "#baffdd" }}>{message}</span>
       ) : null}
-    </div>
+      {errorMessage ? (
+        <span style={{ ...mutedStyle, color: "#ffb3b3" }}>
+          {errorMessage}
+        </span>
+      ) : null}
+    </section>
   );
 }

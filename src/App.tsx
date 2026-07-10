@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import BackgroundMusic from "./components/BackgroundMusic";
 import Collection from "./screens/Collection";
@@ -12,8 +13,13 @@ import Profile from "./screens/Profile";
 import Settings from "./screens/Settings";
 import Shop from "./screens/Shop";
 import Shell from "./ui/shell";
+import { syncSupabaseSessionFromLauncher } from "./services/supabaseClient";
 
 export default function App() {
+  useEffect(() => {
+    void syncSupabaseSessionFromLauncher();
+  }, []);
+
   return (
     <HashRouter >
       <BackgroundMusic />
@@ -32,6 +38,8 @@ export default function App() {
           <Route path="/profile" element={<Profile />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/match/ai" element={<MatchPage />} />
+          <Route path="/match/online" element={<MatchPage />} />
+          <Route path="/match/:mode" element={<MatchPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Shell>

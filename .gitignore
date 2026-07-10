@@ -75,3 +75,5 @@ if (!(Test-Path ".gitignore")) {
     Add-Content -Path ".gitignore" -Value $_
   }
 }
+.vercel
+fraktum-game-dev.zip

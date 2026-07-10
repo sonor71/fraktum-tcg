@@ -501,6 +501,7 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
   const payloadRecord = payload as unknown as Record<string, unknown>;
   const playerWillConfig = normalizeWillMatchConfig(payloadRecord.playerWillStats ?? payloadRecord.playerWillConfig);
   const enemyWillConfig = normalizeWillMatchConfig(payloadRecord.enemyWillStats ?? payloadRecord.enemyWillConfig);
+  const startingPlayerId: PlayerId = payloadRecord.startingPlayerId === "enemy" ? "enemy" : "player";
   const playerDeck = payload.playerDeck && payload.playerDeck.length > 0 ? payload.playerDeck : defs;
   const enemyDeck =
     payload.enemyDeck && payload.enemyDeck.length > 0
@@ -513,9 +514,9 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
 
   return {
     id: `match_${Date.now()}`,
-    phase: "roll",
+    phase: startingPlayerId === "player" ? "roll" : "enemy",
     turn: 1,
-    activePlayerId: "player",
+    activePlayerId: startingPlayerId,
     player: makeSide("player", playerDeck, defs, playerWillConfig),
     enemy: makeSide("enemy", enemyDeck, defs, enemyWillConfig),
     board: {
@@ -530,7 +531,7 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
         : "Player deck fallback loaded from default card pool.",
       "Bonus cards were assigned to hero slots.",
       `Player Will upgrades: max ${playerWillConfig.maxWill}, regen +${playerWillConfig.regenPerRound}/round.`,
-      "Player starts in roll phase.",
+      startingPlayerId === "player" ? "Player starts in roll phase." : "Opponent starts in roll phase.",
     ],
     rngSeed: payload.seed ?? 12345,
   };
@@ -700,9 +701,9 @@ export function cleanupTemporaryCards(state: MatchState): MatchState {
       if (!isTemporaryCard(card)) return card;
 
       movingToDiscard.push({
-  ...card,
-  temporaryUntilRoundEnd: false,
-} as CardInstance);
+        ...card,
+        temporaryUntilRoundEnd: false,
+      } as CardInstance);
 
       return null;
     });

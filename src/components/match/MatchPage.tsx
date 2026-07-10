@@ -30,6 +30,12 @@ import {
   type OnlinePlayerSnapshot,
   type OnlineSeat,
 } from "../../services/onlineMatchmaking";
+import {
+  appendOnlineMatchAction,
+  fetchOnlineMatchActions,
+  subscribeToOnlineMatchActions,
+  type OnlineMatchActionEvent,
+} from "../../services/onlineMatchActions";
 import "./match.css";
 
 type MatchStateSnapshot = ReturnType<typeof createInitialMatchState>;
@@ -457,6 +463,54 @@ function matchReducer(current: MatchStateSnapshot, action: GameAction) {
   return dispatch(current, action);
 }
 
+function remapOnlinePlayerId(value: unknown, isOwnAction: boolean) {
+  if (value === "player") return isOwnAction ? "player" : "enemy";
+  if (value === "enemy") return isOwnAction ? "enemy" : "player";
+  return value;
+}
+
+function remapOnlineCardInstanceId(value: unknown, isOwnAction: boolean) {
+  if (typeof value !== "string") return value;
+  if (isOwnAction) return value.replace(/^enemy_/, "player_");
+  return value.replace(/^player_/, "enemy_");
+}
+
+function cloneOnlineAction(action: unknown): Record<string, unknown> | null {
+  if (!action || typeof action !== "object") return null;
+  return JSON.parse(JSON.stringify(action)) as Record<string, unknown>;
+}
+
+function mapOnlineActionForLocalClient(event: OnlineMatchActionEvent, ownSeat: OnlineSeat): GameAction | null {
+  const action = cloneOnlineAction(event.action);
+  if (!action) return null;
+
+  if (action.type === "START_MATCH" || action.type === "AI_TURN") return null;
+
+  const isOwnAction = event.actor_seat === ownSeat;
+
+  if ("playerId" in action) {
+    action.playerId = remapOnlinePlayerId(action.playerId, isOwnAction);
+  }
+
+  if ("cardInstanceId" in action) {
+    action.cardInstanceId = remapOnlineCardInstanceId(action.cardInstanceId, isOwnAction);
+  }
+
+  const target = action.target;
+  if (target && typeof target === "object") {
+    const targetRecord = target as Record<string, unknown>;
+    if ("playerId" in targetRecord) {
+      targetRecord.playerId = remapOnlinePlayerId(targetRecord.playerId, isOwnAction);
+    }
+  }
+
+  return action as unknown as GameAction;
+}
+
+function makeClientActionId() {
+  return `client_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
 export default function MatchPage() {
   const nav = useNavigate();
   const location = useLocation();
@@ -509,6 +563,10 @@ export default function MatchPage() {
   const autoPlayerTurnTimer = useRef<number | null>(null);
   const onlineQueueTimer = useRef<number | null>(null);
   const onlineRoomUnsubscribe = useRef<(() => void) | null>(null);
+  const onlineActionUnsubscribe = useRef<(() => void) | null>(null);
+  const onlineActionPollTimer = useRef<number | null>(null);
+  const processedOnlineActionIds = useRef<Set<string>>(new Set());
+  const onlineSeatRef = useRef<OnlineSeat | null>(null);
   const startedOnlineRoomId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -591,6 +649,10 @@ export default function MatchPage() {
   }, [applyMatchResultToProgress, state.id, state.winner]);
 
   useEffect(() => {
+    onlineSeatRef.current = onlineSeat;
+  }, [onlineRoom, onlineSeat]);
+
+  useEffect(() => {
     return () => {
       clearTimer(pendingPlayTimer);
       clearTimer(aiTurnTimer);
@@ -598,6 +660,9 @@ export default function MatchPage() {
       clearTimer(onlineQueueTimer);
       onlineRoomUnsubscribe.current?.();
       onlineRoomUnsubscribe.current = null;
+      onlineActionUnsubscribe.current?.();
+      onlineActionUnsubscribe.current = null;
+      clearTimer(onlineActionPollTimer);
       fxTimers.current.forEach((timer) => window.clearTimeout(timer));
       fxTimers.current = [];
       travelTimers.current.forEach((timer) => window.clearTimeout(timer));
@@ -611,6 +676,10 @@ export default function MatchPage() {
     clearTimer(onlineQueueTimer);
     onlineRoomUnsubscribe.current?.();
     onlineRoomUnsubscribe.current = null;
+    onlineActionUnsubscribe.current?.();
+    onlineActionUnsubscribe.current = null;
+    clearTimer(onlineActionPollTimer);
+    processedOnlineActionIds.current = new Set();
     startedOnlineRoomId.current = null;
     setOnlineRoom(null);
     setOnlineSeat(null);
@@ -627,6 +696,44 @@ export default function MatchPage() {
     setUiLog((entries) => pushLimited(entries, `${prefix} ${message}`));
   }, []);
 
+  const processOnlineActionEvents = useCallback((events: OnlineMatchActionEvent[]) => {
+    const seat = onlineSeatRef.current;
+    if (!seat) return;
+
+    const sorted = [...events].sort((a, b) => {
+      const timeA = new Date(a.created_at || 0).getTime();
+      const timeB = new Date(b.created_at || 0).getTime();
+      return timeA - timeB || a.id.localeCompare(b.id);
+    });
+
+    for (const event of sorted) {
+      if (!event?.id || processedOnlineActionIds.current.has(event.id)) continue;
+      processedOnlineActionIds.current.add(event.id);
+
+      const mappedAction = mapOnlineActionForLocalClient(event, seat);
+      if (!mappedAction) continue;
+      send(mappedAction);
+    }
+  }, []);
+
+  const submitGameAction = useCallback(async (action: GameAction) => {
+    if (!isOnlineMode || !onlineRoom?.id || !onlineSeat || onlineQueueState !== "matched") {
+      send(action);
+      return;
+    }
+
+    try {
+      await appendOnlineMatchAction({
+        roomId: onlineRoom.id,
+        seat: onlineSeat,
+        action,
+        clientActionId: makeClientActionId(),
+      });
+    } catch (error) {
+      setUiLog((entries) => pushLimited(entries, `[WARN] Online action failed: ${error instanceof Error ? error.message : String(error)}`));
+    }
+  }, [isOnlineMode, onlineQueueState, onlineRoom?.id, onlineSeat]);
+
   const clearPendingPlay = useCallback(() => {
     clearTimer(pendingPlayTimer);
   }, []);
@@ -641,15 +748,15 @@ export default function MatchPage() {
       return;
     }
 
-    send({
+    void submitGameAction({
       type: "PLAY_CARD",
       playerId: "player",
       cardInstanceId,
       target: { type: "slot", playerId: "player", slotIndex },
-    });
+    } as GameAction);
 
     setSelectedCardId(null);
-  }, [addUiLog]);
+  }, [addUiLog, submitGameAction]);
 
   const playCard = useCallback((cardInstanceId: string, slotIndex: number) => {
     const currentState = stateRef.current;
@@ -681,8 +788,8 @@ export default function MatchPage() {
 
     setSelectedCardId(null);
     clearPendingPlay();
-    send({ type: "ROLL_D20", playerId: "player" });
-  }, [addUiLog, clearPendingPlay]);
+    void submitGameAction({ type: "ROLL_D20", playerId: "player" } as GameAction);
+  }, [addUiLog, clearPendingPlay, submitGameAction]);
 
   const handleEndTurn = useCallback(() => {
     const currentState = stateRef.current;
@@ -701,8 +808,8 @@ export default function MatchPage() {
 
     setSelectedCardId(null);
     clearPendingPlay();
-    send({ type: "END_TURN", playerId: "player" });
-  }, [addUiLog, clearPendingPlay]);
+    void submitGameAction({ type: "END_TURN", playerId: "player" } as GameAction);
+  }, [addUiLog, clearPendingPlay, submitGameAction]);
 
   const handleAiTurn = useCallback(() => {
     const currentState = stateRef.current;
@@ -726,6 +833,9 @@ export default function MatchPage() {
     clearTimer(aiTurnTimer);
     clearTimer(autoPlayerTurnTimer);
     clearTimer(onlineQueueTimer);
+    clearTimer(onlineActionPollTimer);
+    onlineActionUnsubscribe.current?.();
+    onlineActionUnsubscribe.current = null;
     fxTimers.current.forEach((timer) => window.clearTimeout(timer));
     fxTimers.current = [];
     travelTimers.current.forEach((timer) => window.clearTimeout(timer));
@@ -753,6 +863,9 @@ export default function MatchPage() {
     clearTimer(aiTurnTimer);
     clearTimer(autoPlayerTurnTimer);
     clearTimer(onlineQueueTimer);
+    clearTimer(onlineActionPollTimer);
+    onlineActionUnsubscribe.current?.();
+    onlineActionUnsubscribe.current = null;
     fxTimers.current.forEach((timer) => window.clearTimeout(timer));
     fxTimers.current = [];
     travelTimers.current.forEach((timer) => window.clearTimeout(timer));
@@ -774,8 +887,8 @@ export default function MatchPage() {
     clearTimer(onlineQueueTimer);
     setSelectedCardId(null);
     setAiThinking(false);
-    send({ type: "CONCEDE", playerId: "player" });
-  }, []);
+    void submitGameAction({ type: "CONCEDE", playerId: "player" } as GameAction);
+  }, [submitGameAction]);
 
   const startOnlineRoomMatch = useCallback(async (room: OnlineMatchRoom, seat: OnlineSeat) => {
     if (!isRoomReady(room)) return;
@@ -784,7 +897,10 @@ export default function MatchPage() {
     clearTimer(onlineQueueTimer);
 
     const fallbackWillStats = getWillStatsFromUpgrades(willUpgrades);
-    const payload = buildMatchPayloadFromOnlineRoom(room, seat, fallbackWillStats);
+    const payload = {
+      ...buildMatchPayloadFromOnlineRoom(room, seat, fallbackWillStats),
+      startingPlayerId: seat === "a" ? "player" : "enemy",
+    } as unknown as StartMatchPayload;
     const own = getOwnSnapshot(room, seat);
     const opponent = getOpponentSnapshot(room, seat);
 
@@ -794,7 +910,7 @@ export default function MatchPage() {
     setOnlineQueueState("matched");
     setOnlineQueueMessage(`Opponent found: ${opponent?.playerName ?? "unknown player"}.`);
     setUiLog((entries) => pushLimited(entries, `[SYS] Online room ${room.id.slice(0, 8)} matched. You are seat ${seat.toUpperCase()}.`));
-    setUiLog((entries) => pushLimited(entries, `[SYS] ${own?.playerName ?? "You"} vs ${opponent?.playerName ?? "Opponent"}. Action sync comes in Stage Z.`));
+    setUiLog((entries) => pushLimited(entries, `[SYS] ${own?.playerName ?? "You"} vs ${opponent?.playerName ?? "Opponent"}. Realtime action sync enabled.`));
 
     send({
       type: "START_MATCH",
@@ -943,13 +1059,51 @@ export default function MatchPage() {
       autoPlayerTurnTimer.current = null;
       const currentState = stateRef.current;
       if (currentState.winner || currentState.activePlayerId !== "player" || currentState.phase !== "main") return;
-      send({ type: "END_TURN", playerId: "player" });
+      void submitGameAction({ type: "END_TURN", playerId: "player" } as GameAction);
     }, playedCard ? AUTO_PLAYER_END_AFTER_PLAY_MS : AUTO_PLAYER_PASS_EMPTY_MS);
 
     return () => {
       clearTimer(autoPlayerTurnTimer);
     };
   }, [state]);
+
+  useEffect(() => {
+    onlineActionUnsubscribe.current?.();
+    onlineActionUnsubscribe.current = null;
+    clearTimer(onlineActionPollTimer);
+
+    if (!isOnlineMode || onlineQueueState !== "matched" || !onlineRoom?.id || !onlineSeat) return;
+
+    processedOnlineActionIds.current = new Set();
+
+    fetchOnlineMatchActions(onlineRoom.id)
+      .then(processOnlineActionEvents)
+      .catch((error: unknown) => {
+        setUiLog((entries) => pushLimited(entries, `[WARN] Could not fetch online actions: ${error instanceof Error ? error.message : String(error)}`));
+      });
+
+    onlineActionUnsubscribe.current = subscribeToOnlineMatchActions(
+      onlineRoom.id,
+      (event: OnlineMatchActionEvent) => processOnlineActionEvents([event]),
+      (error: unknown) => {
+        setUiLog((entries) => pushLimited(entries, `[WARN] Online action realtime warning: ${error instanceof Error ? error.message : String(error)}`));
+      },
+    );
+
+    const pollTimer = window.setInterval(() => {
+      fetchOnlineMatchActions(onlineRoom.id)
+        .then(processOnlineActionEvents)
+        .catch(() => undefined);
+    }, 2000);
+
+    onlineActionPollTimer.current = pollTimer as unknown as number;
+
+    return () => {
+      onlineActionUnsubscribe.current?.();
+      onlineActionUnsubscribe.current = null;
+      clearTimer(onlineActionPollTimer);
+    };
+  }, [isOnlineMode, onlineQueueState, onlineRoom?.id, onlineSeat, processOnlineActionEvents]);
 
   useEffect(() => {
     if (!selectedCardId) return;

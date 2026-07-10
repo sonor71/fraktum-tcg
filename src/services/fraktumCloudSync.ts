@@ -1,5 +1,5 @@
 import type { AuthChangeEvent } from "@supabase/supabase-js";
-import { requireSupabase, supabase, isSupabaseConfigured, type FraktumCloudUser } from "./supabaseClient";
+import { requireSupabase, supabase, isSupabaseConfigured, syncSupabaseSessionFromLauncher, type FraktumCloudUser } from "./supabaseClient";
 import { useGameStore, type GameState } from "../useGameStore";
 
 export const CLOUD_AUTOSYNC_CHANGED_EVENT = "fraktum:cloud-autosync-changed";
@@ -122,6 +122,8 @@ export function applyCloudSaveData(save: unknown) {
 export async function getCloudAuthState(): Promise<CloudAuthState> {
   if (!isSupabaseConfigured() || !supabase) return { configured: false, user: null };
 
+  await syncSupabaseSessionFromLauncher();
+
   const { data, error } = await supabase.auth.getUser();
   if (error) return { configured: true, user: null };
 
@@ -138,21 +140,36 @@ export function onCloudAuthStateChange(callback: (user: FraktumCloudUser | null,
   return () => data.subscription.unsubscribe();
 }
 
-export async function signInCloud(email: string, password: string) {
-  const client = requireSupabase();
-  const { data, error } = await client.auth.signInWithPassword({ email: email.trim(), password });
-  if (error) throw error;
-  await ensureCloudProfile();
-  return data.user;
+function normalizeCloudEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+
+  if (!normalized || !normalized.includes("@")) {
+    throw new Error("Enter a valid email address.");
+  }
+
+  return normalized;
 }
 
-export async function signUpCloud(email: string, password: string, displayName: string) {
+function normalizeCloudCode(code: string) {
+  const normalized = code.trim().replace(/\s+/g, "");
+
+  if (!normalized) {
+    throw new Error("Enter the code from your email.");
+  }
+
+  return normalized;
+}
+
+export async function requestCloudEmailCode(email: string, displayName?: string) {
   const client = requireSupabase();
-  const normalizedName = displayName.trim() || getCurrentStoreState().playerName || "FRAKTUM Player";
-  const { data, error } = await client.auth.signUp({
-    email: email.trim(),
-    password,
+  const normalizedEmail = normalizeCloudEmail(email);
+  const normalizedName = displayName?.trim() || getCurrentStoreState().playerName || "FRAKTUM Player";
+
+  const { error } = await client.auth.signInWithOtp({
+    email: normalizedEmail,
     options: {
+      shouldCreateUser: true,
+      emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
       data: {
         display_name: normalizedName,
         player_name: normalizedName,
@@ -161,8 +178,56 @@ export async function signUpCloud(email: string, password: string, displayName: 
   });
 
   if (error) throw error;
-  await ensureCloudProfile(normalizedName);
+
+  return {
+    email: normalizedEmail,
+    displayName: normalizedName,
+  };
+}
+
+export async function verifyCloudEmailCode(email: string, code: string, displayName?: string) {
+  const client = requireSupabase();
+  const normalizedEmail = normalizeCloudEmail(email);
+  const token = normalizeCloudCode(code);
+
+  const { data, error } = await client.auth.verifyOtp({
+    email: normalizedEmail,
+    token,
+    type: "email",
+  });
+
+  if (error) throw error;
+  if (!data.session || !data.user) {
+    throw new Error("Supabase verified the code but did not create a session.");
+  }
+
+  // Authentication is already complete at this point. A profile-table issue
+  // must never make the UI report that login failed.
+  try {
+    await ensureCloudProfile(displayName);
+  } catch (profileError) {
+    console.warn("[FRAKTUM] Login succeeded, but profile sync failed", profileError);
+  }
+
   return data.user;
+}
+
+/**
+ * Backward-compatible wrapper for old UI code.
+ * FRAKTUM now uses email code login, so this only sends the code.
+ */
+export async function signInCloud(email: string, _password?: string) {
+  await requestCloudEmailCode(email);
+  return null;
+}
+
+/**
+ * Backward-compatible wrapper for old UI code.
+ * FRAKTUM now creates accounts through email code login, without passwords.
+ */
+export async function signUpCloud(email: string, _password: string | undefined, displayName: string) {
+  await requestCloudEmailCode(email, displayName);
+  return null;
 }
 
 export async function signOutCloud() {
@@ -174,6 +239,7 @@ export async function signOutCloud() {
 
 export async function ensureCloudProfile(displayName?: string) {
   const client = requireSupabase();
+  await syncSupabaseSessionFromLauncher();
   const { data: userData, error: userError } = await client.auth.getUser();
   if (userError) throw userError;
 
@@ -229,6 +295,7 @@ export async function pushLocalSaveToCloud() {
 
 export async function getCloudSaveMeta(): Promise<CloudSaveMeta | null> {
   const client = requireSupabase();
+  await syncSupabaseSessionFromLauncher();
   const { data: userData, error: userError } = await client.auth.getUser();
   if (userError) throw userError;
 
@@ -253,6 +320,7 @@ export async function getCloudSaveMeta(): Promise<CloudSaveMeta | null> {
 
 export async function pullCloudSaveToLocal() {
   const client = requireSupabase();
+  await syncSupabaseSessionFromLauncher();
   const { data: userData, error: userError } = await client.auth.getUser();
   if (userError) throw userError;
 
