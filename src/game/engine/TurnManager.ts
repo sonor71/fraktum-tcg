@@ -1,6 +1,7 @@
 import type { CardInstance, MatchState, PlayerId, TargetRef } from "../core/types";
 
-export const BOARD_SIZE = 5;
+import { BOARD_SIZE } from "./Rules";
+export { BOARD_SIZE };
 
 export const otherPlayer = (playerId: PlayerId): PlayerId =>
   playerId === "player" ? "enemy" : "player";
@@ -114,12 +115,55 @@ export function canPlayerPlayCards(state: MatchState, playerId: PlayerId) {
   return playerId === "player" ? state.phase === "main" : state.phase === "enemy";
 }
 
+
+export function cardRequiresBoardSlot(card: CardInstance) {
+  const explicit = (card.definition as unknown as Record<string, unknown>).requiresBoardSlot;
+  if (typeof explicit === "boolean") return explicit;
+
+  // Existing catalog cards use board slots for combat permanents and temporary visible actions.
+  // Technical cards may opt out with requiresBoardSlot: false.
+  return true;
+}
+
+export function getEffectiveCardCost(state: MatchState, playerId: PlayerId, card: CardInstance) {
+  const printedCost = getCardCost(card);
+  const turn = state.currentTurn;
+  const freeByTurn = turn?.playerId === playerId && turn.freeCards;
+  const freeByWorldWithoutWill = state.activeRouletteEvent === "WORLD_WITHOUT_WILL";
+  return freeByTurn || freeByWorldWithoutWill ? 0 : printedCost;
+}
+
+export function canPlayCardWithCurrentResources(state: MatchState, playerId: PlayerId, card: CardInstance) {
+  const side = state[playerId];
+  if (!canPlayerPlayCards(state, playerId)) return false;
+  if (getEffectiveCardCost(state, playerId, card) > side.will) return false;
+  if (state.currentTurn?.playerId === playerId && state.currentTurn.d20Limit !== "unlimited" && state.currentTurn.playsUsed >= state.currentTurn.d20Limit) return false;
+  if (cardRequiresBoardSlot(card) && !hasFreeSlot(state, playerId)) return false;
+  return true;
+}
+
+export function canPlayerMakeAnyMove(state: MatchState, playerId: PlayerId) {
+  if (!canPlayerPlayCards(state, playerId)) return false;
+  if (state[playerId].hand.some((card) => canPlayCardWithCurrentResources(state, playerId, card))) return true;
+
+  const turn = state.currentTurn;
+  const canSpendAction = !turn || turn.d20Limit === "unlimited" || turn.playsUsed < turn.d20Limit;
+  const canDestroyOwnCard = Boolean(
+    turn?.playerId === playerId &&
+      !turn.destroyedOwnCard &&
+      canSpendAction &&
+      state[playerId].will >= 1 &&
+      getOccupiedSlotCount(state, playerId) > 0,
+  );
+
+  return canDestroyOwnCard;
+}
+
 export function getPlayableCards(state: MatchState, playerId: PlayerId) {
   const side = state[playerId];
   if (!canPlayerPlayCards(state, playerId)) return [];
-  if (!hasFreeSlot(state, playerId)) return [];
 
-  return side.hand.filter((card) => getCardCost(card) <= side.will);
+  return side.hand.filter((card) => canPlayCardWithCurrentResources(state, playerId, card));
 }
 
 export function getPlayableCardScore(card: CardInstance) {

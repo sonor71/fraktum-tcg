@@ -3856,3 +3856,214 @@ button { -webkit-tap-highlight-color: transparent; }
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.matchDebugToggle {
+  position: fixed;
+  z-index: 70;
+  right: max(14px, calc((100vw - var(--stage-w)) / 2 + 14px));
+  bottom: max(12px, calc((100svh - var(--stage-h)) / 2 + 12px));
+  border: 1px solid rgba(123, 233, 255, .42);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: #dff8ff;
+  background: rgba(3, 10, 18, .86);
+  box-shadow: 0 10px 30px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.08);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  cursor: pointer;
+}
+
+.matchDebugToggle b {
+  margin-left: 6px;
+  color: #ffe0a0;
+}
+
+.matchDebugConsole {
+  position: fixed;
+  z-index: 80;
+  left: max(16px, calc((100vw - var(--stage-w)) / 2 + 16px));
+  right: max(16px, calc((100vw - var(--stage-w)) / 2 + 16px));
+  bottom: max(18px, calc((100svh - var(--stage-h)) / 2 + 18px));
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(123, 233, 255, .34);
+  border-radius: 18px;
+  color: #eafcff;
+  background: linear-gradient(180deg, rgba(6, 12, 20, .96), rgba(4, 6, 12, .97));
+  box-shadow: 0 28px 100px rgba(0,0,0,.64), inset 0 1px 0 rgba(255,255,255,.08);
+  backdrop-filter: blur(18px);
+}
+
+.matchDebugConsole header,
+.matchDebugToolbar,
+.matchDebugFilters,
+.matchDebugPrevious article {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.matchDebugConsole header {
+  justify-content: space-between;
+}
+
+.matchDebugConsole header span,
+.matchDebugPrevious summary {
+  color: #7be9ff;
+  font-weight: 950;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.matchDebugConsole header b,
+.matchDebugConsole header small {
+  display: block;
+  color: rgba(234, 252, 255, .72);
+  font-size: 11px;
+}
+
+.matchDebugConsole button,
+.matchDebugConsole input {
+  border: 1px solid rgba(123, 233, 255, .24);
+  border-radius: 10px;
+  color: #eafcff;
+  background: rgba(255,255,255,.06);
+  padding: 7px 9px;
+}
+
+.matchDebugConsole button {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.matchDebugConsole input[type="text"],
+.matchDebugToolbar input:not([type]) {
+  min-width: 220px;
+}
+
+.matchDebugToolbar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(234,252,255,.70);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.matchDebugFilters button.is-active {
+  border-color: #ffe0a0;
+  color: #1b0e06;
+  background: linear-gradient(180deg, #ffe0a0, #d7a348);
+}
+
+.matchDebugList {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.matchDebugEvent {
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  background: rgba(255,255,255,.035);
+}
+
+.matchDebugEvent.is-warning { border-color: rgba(255, 224, 160, .42); }
+.matchDebugEvent.is-error { border-color: rgba(255, 83, 101, .58); }
+
+.matchDebugEvent > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 54px 74px 110px 120px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  text-transform: none;
+}
+
+.matchDebugEvent > button span,
+.matchDebugEvent > button b,
+.matchDebugEvent > button i {
+  color: rgba(234,252,255,.66);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matchDebugEvent > button strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+}
+
+.matchDebugDetails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  padding: 0 10px 10px;
+}
+
+.matchDebugDetails section {
+  min-width: 0;
+}
+
+.matchDebugDetails h4 {
+  margin: 4px 0;
+  color: #ffe0a0;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.matchDebugDetails pre {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(0,0,0,.36);
+  color: rgba(234,252,255,.86);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.matchDebugPrevious {
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding-top: 6px;
+}
+
+.matchDebugPrevious div {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.matchDebugPrevious article {
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+@media (max-width: 760px) {
+  .matchDebugEvent > button {
+    grid-template-columns: 46px 64px minmax(0, 1fr);
+  }
+
+  .matchDebugEvent > button b,
+  .matchDebugEvent > button i {
+    display: none;
+  }
+}

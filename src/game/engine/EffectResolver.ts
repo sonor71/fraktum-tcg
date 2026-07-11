@@ -1,5 +1,6 @@
 import type { CardInstance, MatchState, PlayerId, TargetRef } from "../core/types";
-import { rollDie } from "./Random";
+import { rollDie, shuffleWithSeed } from "./Random";
+import { resolveCaduceusBattleDraw } from "./MatchEngine";
 import {
   getCardBoardMaxHp,
   getCardCurrentHp,
@@ -9,6 +10,7 @@ import {
   playerLabel,
   slotsKey,
 } from "./TurnManager";
+import { FATE_ROULETTE_EVENTS } from "./Rules";
 
 const LOG_LIMIT = 80;
 
@@ -189,7 +191,7 @@ function appendRevealEvent(
   const previous = Array.isArray(record.tacticalRevealEvents) ? record.tacticalRevealEvents as TacticalRevealEvent[] : [];
   const nextEvent: TacticalRevealEvent = {
     ...event,
-    id: `reveal_${Date.now()}_${previous.length}_${Math.floor(Math.random() * 10000)}`,
+    id: `reveal_${state.rngSeed}_${previous.length}`,
     createdAt: Date.now(),
   };
 
@@ -300,7 +302,7 @@ function keyToEffects(effectKey: string, card: CardInstance): RawEffect[] {
   if (key.includes("restore")) return [{ op: "restoreLastTurnLostHp", amount: power }];
   if (key.includes("reverse")) return [{ op: "reverseIncoming", amount: 1 }];
   if (key.includes("peek")) return [{ op: "peekDeck", amount: power }];
-  if (key.includes("force") && key.includes("draw")) return [{ op: "forceDraw", amount: power, target: "enemy" }];
+  if (key.includes("force") && key.includes("draw")) return [{ op: "forceDrawMatch" }];
   if (key.includes("skip") || key.includes("freeze")) return [{ op: "skipTurnChance", chance: 100, target: "enemy" }];
   if (key.includes("draw")) return [{ op: "draw", amount: power, target: "self" }];
   if (key.includes("discard")) return [{ op: "discard", amount: power, target: "enemy" }];
@@ -329,53 +331,51 @@ function getExplicitEffects(card: CardInstance): RawEffect[] {
 function getKnownCardEffects(card: CardInstance): RawEffect[] {
   const attack = Math.max(1, getPrintedAttack(card) || getDefinitionPower(card, 1));
 
-  // Attack cards from the balancing table.
-  if (hasSig(card, ["ENS", "energy sword", "энергетический меч"])) return [{ op: "damageFront", amount: 3 }, { op: "damageHero", amount: 2, target: "enemyHero" }];
-  if (hasSig(card, ["SND", "sandstorm", "песчаная буря"])) return [{ op: "randomDamage", min: 3, max: 4, target: "enemy" }];
-  if (hasSig(card, ["SHS", "shadow sword", "теневой меч"])) return [{ op: "damageFront", amount: 2 }, { op: "applyAilment", target: "enemy", amount: 1 }];
-  if (hasSig(card, ["MAG", "маг", "mage"])) return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
-  if (hasSig(card, ["EFS", "elven sword", "эльфийский меч", "the elven sword"])) return [{ op: "damage", amount: 3, target: "frontEnemy" }];
-  if (hasSig(card, ["HNT", "охотник", "hunter"])) return [{ op: "damage", amount: 3, target: "frontEnemy" }];
-  if (hasSig(card, ["LBL", "шаровая молния", "spherical lightning"])) return [{ op: "halfEnemyHeroHp" }];
-  if (hasSig(card, ["VLK", "валькирия", "valkyrie"])) return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
-  if (hasSig(card, ["THD", "громовержец", "thunderbolts", "thunderbolt"])) return [{ op: "damageHero", amount: 4, target: "enemyHero" }, { op: "damageFront", amount: 3 }];
-  if (hasSig(card, ["THN", "раскаты молний", "thunder rolls"])) return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
-  if (hasSig(card, ["WRL", "варлок", "warlock"])) return [{ op: "damageAllEnemySlots", min: 3, max: 4 }, { op: "damageHero", amount: 4, target: "enemyHero" }, { op: "applyFriday", target: "enemy" }];
-  if (hasSig(card, ["EXC", "экскалибур", "excalibur"])) return [{ op: "damage", amount: 10, target: "frontEnemy" }, { op: "returnPlayedToDeck" }];
-  if (hasSig(card, ["FIR", "огонь", "fire"])) return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
-  if (hasSig(card, ["ICE", "лед", "лёд", "ice"])) return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }, { op: "freezeFront" }];
+  switch (card.baseId || card.definition.id) {
+    case "energy_sword": return [{ op: "damageFront", amount: 3 }, { op: "damageHero", amount: 2, target: "enemyHero" }];
+    case "sandstorm": return [{ op: "randomDamage", min: 3, max: 4, target: "enemy" }];
+    case "shadow_sword": return [{ op: "damageFront", amount: 2 }, { op: "applyAilment", target: "enemy", amount: 1 }];
+    case "magician": return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
+    case "elven_sword": return [{ op: "damage", amount: 3, target: "frontEnemy" }];
+    case "hunter": return [{ op: "damage", amount: 3, target: "frontEnemy" }];
+    case "spherical_lightning": return [{ op: "halfEnemyHeroHp" }];
+    case "valkyrie": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
+    case "thunderer": return [{ op: "damageHero", amount: 4, target: "enemyHero" }, { op: "damageFront", amount: 3 }];
+    case "thunderbolts": return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
+    case "warlock": return [{ op: "damageAllEnemySlots", min: 3, max: 4 }, { op: "damageHero", amount: 4, target: "enemyHero" }, { op: "applyFriday", target: "enemy" }];
+    case "excalibur": return [{ op: "damage", amount: 10, target: "frontEnemy" }, { op: "returnPlayedToDeck" }];
+    case "fire": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
+    case "ice": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
+    case "hand_of_god": return [{ op: "playRevealedOracleCard" }];
+    case "seventy_one": return [{ op: "addMatchTime", amount: 71 }];
+    case "time_of_reckoning": return [{ op: "halveEnemyWill" }, { op: "damageEnemyHeroPercent", amount: 25 }];
+    case "dragon_eye": return [{ op: "revealRandomEnemyCard", amount: 1, target: "enemy" }];
+    case "wood_vines": return [{ op: "freezeFront" }];
+    case "tree_of_life": return [{ op: "restoreLastTurnLostHp", amount: 999 }];
+    case "caduceus": return [{ op: "forceDrawMatch" }];
+    case "book_knowledge": return [{ op: "knowledge" }];
+    case "oracle": return [{ op: "peekHand", target: "enemy", amount: 99 }];
+    case "reverse_heart": return [{ op: "swapHeroHp" }];
+    case "double_speed": return [{ op: "doubleSpeed" }];
+    case "reverse": return [{ op: "reverseIncoming" }];
+    case "fifteen_sixteen": return [{ op: "roulette" }];
+    case "amulet_of_old_sage": return [{ op: "drawFromDiscardOrDeck", amount: 1 }];
+    case "hyper_night": return [{ op: "skipTurnChanceOrDiscard", chance: 30, target: "enemy", amount: 2 }];
+    case "shield_hope": return [{ op: "shield", amount: Math.max(3, getCardBoardMaxHp(card) || 3), target: "self" }];
+    case "legendary_messenger": return [{ op: "increaseNextCardPower", amount: 2 }, { op: "peekDeck", amount: 1, target: "self" }];
+    case "seal_of_forgotten_souls": return [{ op: "everySecondEnemyCardSelfDamage" }];
+    case "psychological_disorder": return [{ op: "psychologicalDisorder", target: "enemy" }];
+    case "unrequited_love": return [{ op: "unrequitedLove" }];
+    case "armor_of_chaos": return [{ op: "blockSmallDamage", amount: 3, target: "self" }];
+    case "titan_eye": return [{ op: "reduceNextEnemyCardPower", percent: 20 }];
+    case "Stun_Gun": return [{ op: "stunGunAura" }];
+    default:
+      break;
+  }
 
-  // Tactic/effect cards.
-  if (hasSig(card, ["HOG", "рука бога", "the hand of god", "hand of god"])) return [{ op: "stealAndCastRandom" }];
-  if (hasSig(card, ["SVN", "71", "seventy one", "seventy-one"])) return [{ op: "addMatchTime", amount: 71 }];
-  if (hasSig(card, ["TOR", "время расплаты", "time of reckoning"])) return [{ op: "halveEnemyWill" }, { op: "damageEnemyHeroPercent", amount: 25 }];
-  if (hasSig(card, ["DRE", "драконий глаз", "dragon eye"])) return [{ op: "revealRandomEnemyCard", amount: 1, target: "enemy" }];
-  if (hasSig(card, ["WLV", "древесные лозы", "wooden vines"])) return [{ op: "freezeFront" }];
-  if (hasSig(card, ["TOL", "древо жизни", "tree of life"])) return [{ op: "restoreLastTurnLostHp", amount: 999 }];
-  if (hasSig(card, ["CAD", "кадуцей", "caduceus"])) return [{ op: "forceDrawMatch" }];
-  if (hasSig(card, ["BOK", "книга знаний", "book knowledge", "book of knowledge"])) return [{ op: "knowledge" }];
-  if (hasSig(card, ["ORC", "оракул", "oracle"])) return [{ op: "peekHand", target: "enemy", amount: 99 }];
-  if (hasSig(card, ["RVH", "реверсивное сердце", "reverse heart"])) return [{ op: "swapHeroHp" }];
-  if (hasSig(card, ["DBL", "2x", "2х", "double speed"])) return [{ op: "doubleSpeed" }];
-  if (hasSig(card, ["RVS", "реверс", "reverse"])) return [{ op: "reverseIncoming" }];
-  if (hasSig(card, ["FST", "15-16", "рулетка судьбы", "roulette of fate"])) return [{ op: "roulette" }];
-
-  // Later-table cards.
-  if (hasSig(card, ["AOS", "амулет старого мудреца", "old sage amulet"])) return [{ op: "drawFromDiscardOrDeck", amount: 1 }];
-  if (hasSig(card, ["HYN", "гиперночь", "hyper night", "hypernight"])) return [{ op: "skipTurnChanceOrDiscard", chance: 30, target: "enemy", amount: 2 }];
-  if (hasSig(card, ["SOH", "щит надежды", "shield of hope"])) return [{ op: "shield", amount: Math.max(3, getCardBoardMaxHp(card) || 3), target: "self" }];
-  if (hasSig(card, ["LGV", "легендарный вестник", "legendary messenger"])) return [{ op: "increaseNextCardPower", amount: 2 }, { op: "peekDeck", amount: 1, target: "self" }];
-  if (hasSig(card, ["SFS", "печать забытых душ", "seal of the forgotten souls", "seal of forgotten souls"])) return [{ op: "everySecondEnemyCardSelfDamage" }];
-  if (hasSig(card, ["PSD", "психологическое расстройство", "psychological disorder"])) return [{ op: "psychologicalDisorder", target: "enemy" }];
-  if (hasSig(card, ["URL", "безответная любовь", "unrequited love"])) return [{ op: "unrequitedLove" }];
-  if (hasSig(card, ["CHA", "броня хаоса", "armor of chaos", "armour of chaos"])) return [{ op: "blockSmallDamage", amount: 3, target: "self" }];
-  if (hasSig(card, ["TTE", "глаз титана", "eye titan", "titan eye"])) return [{ op: "reduceNextEnemyCardPower", percent: 20 }];
-  if (hasSig(card, ["SGU", "stun gun", "stungun", "электрошокер", "sun gun"])) return [{ op: "stunGunAura" }];
-  if (hasSig(card, ["ELS", "электрошок", "electroshock"])) return [{ op: "reduceEnemyWillGain", percent: 50 }];
-
-  // If a known attack card does not match a special rule, keep its printed attack.
+  // Fallback only for legacy imported cards without a stable baseId.
+  if (hasSig(card, ["energy sword", "энергетический меч"])) return [{ op: "damageFront", amount: 3 }, { op: "damageHero", amount: 2, target: "enemyHero" }];
   if (attack > 0) return [{ op: "damage", amount: attack, target: "frontEnemy" }];
-
   return [];
 }
 
@@ -855,28 +855,28 @@ function stealAndCastRandom(state: MatchState, playerId: PlayerId, sourceName: s
 }
 
 function forceDrawMatch(state: MatchState, sourceName: string): MatchState {
-  return log({ ...state, phase: "ended", winner: "draw" as any }, `${sourceName} forced an automatic draw.`);
+  return resolveCaduceusBattleDraw(state, sourceName);
 }
 
-function roulette(state: MatchState, playerId: PlayerId, sourceName: string) {
-  const roll = rollDie(state.rngSeed, 6);
-  let next = { ...state, rngSeed: roll.seed };
+function roulette(state: MatchState, _playerId: PlayerId, sourceName: string) {
+  const roll = rollDie(state.rngSeed, FATE_ROULETTE_EVENTS.length);
+  const event = FATE_ROULETTE_EVENTS[roll.value - 1];
+  let next: MatchState = { ...state, rngSeed: roll.seed, activeRouletteEvent: event };
 
-  switch (roll.value) {
-    case 1:
-      return healHero(next, playerId, 5, sourceName);
-    case 2:
-      return damageHero(next, playerId, 3, otherPlayer(playerId), sourceName);
-    case 3:
-      return drawCardsForSide(next, playerId, 2, sourceName);
-    case 4:
-      return discardRandomFromHand(next, otherPlayer(playerId), 2, sourceName);
-    case 5:
-      return addShield(next, playerId, 4, sourceName);
-    default:
-      next = modifyWill(next, playerId, 3, sourceName);
-      return modifyWill(next, otherPlayer(playerId), -3, sourceName);
+  if (event === "MERGED_DECKS") {
+    const merged = shuffleWithSeed([...next.player.deck, ...next.enemy.deck], next.rngSeed);
+    const half = Math.ceil(merged.items.length / 2);
+    next = {
+      ...next,
+      rngSeed: merged.seed,
+      player: { ...next.player, deck: merged.items.slice(0, half) },
+      enemy: { ...next.enemy, deck: merged.items.slice(half) },
+    };
+  } else if (event === "WORLD_WITHOUT_WILL") {
+    next = { ...next, currentTurn: next.currentTurn ? { ...next.currentTurn, freeCards: true } : next.currentTurn };
   }
+
+  return log(next, `[ROULETTE] ${sourceName} resolved official event ${event}.`);
 }
 
 function logKnowledge(state: MatchState, targetPlayerId: PlayerId, sourceName: string) {
@@ -963,7 +963,7 @@ function applyEffect(
   }
 
   if (op.includes("drawfromdiscardordeck")) return drawFromDiscardOrDeck(state, playerId, amount, sourceName);
-  if (op.includes("force") && !op.includes("forcedrawmatch")) return drawCardsForSide(state, getEffectTargetPlayer(playerId, effect, "enemy"), amount, sourceName);
+  if (op.includes("force") && op.includes("draw") && !op.includes("forcedrawmatch")) return forceDrawMatch(state, sourceName);
   if (op.includes("draw")) return drawCardsForSide(state, getEffectTargetPlayer(playerId, effect, "self"), amount, sourceName);
   if (op.includes("discard")) return discardRandomFromHand(state, getEffectTargetPlayer(playerId, effect, "enemy"), amount, sourceName);
 
@@ -993,6 +993,7 @@ function applyEffect(
   if (op.includes("applyfriday")) return addTimedEffect(state, otherPlayer(playerId), { id: "friday", source: sourceName, remainingTurns: 1 }, `${sourceName} applied Friday curse.`);
   if (op.includes("reverse")) return addTimedEffect(state, playerId, { id: "reverse_incoming", source: sourceName, remainingTurns: 1 }, `${sourceName} will reverse the next incoming damage.`);
   if (op.includes("restore")) return restoreLastTurnLostHp(state, playerId, effect, sourceName);
+  if (op.includes("reducenextenemycardpower")) return addTimedEffect(state, otherPlayer(playerId), { id: "next_card_power_multiplier", source: sourceName, percent: -readChance(effect, 20) }, `${sourceName} reduced ${playerLabel(otherPlayer(playerId))} next card effectiveness by ${readChance(effect, 20)}%.`);
   if (op.includes("increase") || op.includes("power") || op.includes("buff")) return addTimedEffect(state, playerId, { id: "next_card_power", source: sourceName, amount, remainingTurns: 1 }, `${sourceName} gave ${playerLabel(playerId)} next card +${amount} power.`);
 
   if (op.includes("revealrandomenemycard")) return revealRandomEnemyCard(state, playerId, sourceName);
@@ -1005,6 +1006,7 @@ function applyEffect(
   }
 
   if (op.includes("stungunaura")) return log(state, `${sourceName} is active: enemy Will gain is halved while this card remains on board.`);
+  if (op.includes("playrevealedoraclecard")) return log(state, `${sourceName} requires a card revealed by Oracle; no random steal is performed.`);
   if (op.includes("stealandcastrandom")) return stealAndCastRandom(state, playerId, sourceName);
   if (op.includes("addmatchtime")) return addMatchNote(state, "matchSecondsBonus", amount, sourceName);
   if (op.includes("forcedrawmatch")) return forceDrawMatch(state, sourceName);
@@ -1021,7 +1023,6 @@ function applyEffect(
     return damageAllEnemySlots(state, playerId, 2, 2, sourceName);
   }
   if (op.includes("blocksmalldamage")) return addTimedEffect(state, getEffectTargetPlayer(playerId, effect, "self"), { id: "block_small_damage", source: sourceName, amount }, `${sourceName} blocks incoming damage lower than ${amount}.`);
-  if (op.includes("reducenextenemycardpower")) return addTimedEffect(state, otherPlayer(playerId), { id: "next_card_power_multiplier", source: sourceName, percent: -readChance(effect, 20) }, `${sourceName} reduced ${playerLabel(otherPlayer(playerId))} next card effectiveness by ${readChance(effect, 20)}%.`);
   if (op.includes("reduceenemywillgain")) return addTimedEffect(state, otherPlayer(playerId), { id: "will_gain_multiplier", source: sourceName, percent: -readChance(effect, 50), remainingTurns: 3 }, `${sourceName} reduced ${playerLabel(otherPlayer(playerId))} future Will gain by ${readChance(effect, 50)}%.`);
 
   return log(state, `${sourceName} effect "${readString(effect, ["op", "type", "key"], "unknown")}" has no resolver yet.`);
