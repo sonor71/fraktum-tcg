@@ -506,10 +506,6 @@ function getSlotFromTarget(target: TargetRef | undefined, playerId: PlayerId) {
   return Number.isInteger(slotIndex) ? slotIndex : undefined;
 }
 
-function findFirstOccupiedSlot(state: MatchState, playerId: PlayerId) {
-  return state.board[slotsKey(playerId)].findIndex(Boolean);
-}
-
 function findDamageSlot(
   state: MatchState,
   sourcePlayerId: PlayerId,
@@ -527,11 +523,11 @@ function findDamageSlot(
   const explicitSlot = getSlotFromTarget(target, targetPlayerId);
   if (typeof explicitSlot === "number" && targetSlots[explicitSlot]) return explicitSlot;
 
-  if ((effectTarget === "oppositeSlot" || effectTarget === "frontEnemy") && targetSlots[playedSlotIndex]) {
-    return playedSlotIndex;
+  if (effectTarget === "oppositeSlot" || effectTarget === "frontEnemy") {
+    return isValidSlotIndex(playedSlotIndex, targetSlots.length) && targetSlots[playedSlotIndex] ? playedSlotIndex : -1;
   }
 
-  return findFirstOccupiedSlot(state, targetPlayerId);
+  return -1;
 }
 
 function hasBlockSmallDamage(state: MatchState, targetPlayerId: PlayerId, amount: number) {
@@ -563,9 +559,13 @@ function resolveDamageTarget(
   const enemyId = otherPlayer(playerId);
 
   if (targetHint === "selfHero") return { kind: "hero", playerId };
-  if (targetHint === "enemyHero" || targetHint === "enemy") return { kind: "hero", playerId: enemyId };
 
   const targetPlayerId = targetHint === "playedSlot" || targetHint === "self" ? playerId : enemyId;
+  const explicitSlot = getSlotFromTarget(target, targetPlayerId);
+  if (typeof explicitSlot === "number" && state.board[slotsKey(targetPlayerId)][explicitSlot]) return { kind: "slot", playerId: targetPlayerId, slotIndex: explicitSlot };
+
+  if (targetHint === "enemyHero" || targetHint === "enemy") return { kind: "hero", playerId: enemyId };
+
   const slotIndex = findDamageSlot(state, playerId, targetPlayerId, target, playedSlotIndex, targetHint);
 
   if (slotIndex >= 0) return { kind: "slot", playerId: targetPlayerId, slotIndex };
@@ -641,7 +641,7 @@ function damageFrontSlotOrHero(state: MatchState, playerId: PlayerId, playedSlot
   const enemySlots = state.board[slotsKey(enemyId)];
   const front = isValidSlotIndex(playedSlotIndex, enemySlots.length) && enemySlots[playedSlotIndex]
     ? playedSlotIndex
-    : enemySlots.findIndex(Boolean);
+    : -1;
 
   if (front >= 0) return damageSlot(state, enemyId, front, amount, sourceName);
   return damageHero(state, enemyId, amount, playerId, sourceName);
@@ -942,9 +942,10 @@ function applyEffect(
   const sourceName = getCardTitle(sourceCard);
   const amount = readAmount(effect, getPrintedAttack(sourceCard) || 1);
 
+  if (op.includes("halveenemywill")) return modifyWill(state, otherPlayer(playerId), -Math.ceil(state[otherPlayer(playerId)].will / 2), sourceName);
+  if (op.includes("damageenemyheropercent")) return damageHero(state, otherPlayer(playerId), Math.max(1, Math.floor(state[otherPlayer(playerId)].hp * amount / 100)), playerId, sourceName);
   if (op.includes("damagefront")) return damageFrontSlotOrHero(state, playerId, playedSlotIndex, amount, sourceName);
   if (op.includes("damagehero")) return damageHero(state, getEffectTargetPlayer(playerId, effect, "enemy"), amount, playerId, sourceName);
-  if (op.includes("damageenemyheropercent")) return damageHero(state, otherPlayer(playerId), Math.max(1, Math.floor(state[otherPlayer(playerId)].hp * amount / 100)), playerId, sourceName);
   if (op.includes("halfenemyherohp")) return damageHero(state, otherPlayer(playerId), Math.max(1, Math.floor(state[otherPlayer(playerId)].hp / 2)), playerId, sourceName);
   if (op.includes("randomdamage")) return damageRandomEnemyTarget(state, playerId, readMin(effect, amount), readMax(effect, amount), sourceName);
   if (op.includes("damageallenemyslots")) return damageAllEnemySlots(state, playerId, readMin(effect, amount), readMax(effect, amount), sourceName);
@@ -973,7 +974,6 @@ function applyEffect(
     return modifyWill(state, getEffectTargetPlayer(playerId, effect, "self"), signedAmount, sourceName);
   }
 
-  if (op.includes("halveenemywill")) return modifyWill(state, otherPlayer(playerId), -Math.ceil(state[otherPlayer(playerId)].will / 2), sourceName);
   if (op.includes("swapherohp") || (op.includes("swap") && op.includes("hp"))) return swapHeroHp(state, sourceName);
   if (op.includes("skipturnchanceordiscard")) {
     const attempt = maybeSkipTurn(state, playerId, effect, sourceName);

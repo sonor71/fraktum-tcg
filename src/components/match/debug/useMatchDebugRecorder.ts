@@ -32,7 +32,12 @@ function getLevelFromChanges(changes: MatchDebugEvent["changes"]): MatchDebugEve
 
 function getSourceForAction(actionType: string | undefined, fallback: MatchDebugRecordInput["source"]) {
   if (actionType === "AI_TURN") return "ai";
+  if (actionType === "START_MATCH" || actionType === "START_NEXT_BATTLE" || actionType === "START_NEXT_BATTLE_REQUESTED" || actionType === "BATTLE_STATE_RESET") return "system";
   return fallback;
+}
+
+function isBattleResetTransition(previous: MatchState, next: MatchState) {
+  return (next.battleNumber ?? 1) !== (previous.battleNumber ?? 1) || (previous.phase === "betweenBattles" && next.phase !== "betweenBattles");
 }
 
 export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
@@ -45,6 +50,7 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
   const sequenceRef = useRef(0);
   const previousStateRef = useRef<MatchState | null>(null);
   const previousLogCountRef = useRef(0);
+  const lastProcessedEngineEventIdRef = useRef(0);
   const saveTimerRef = useRef<number | null>(null);
   const latestSessionRef = useRef<MatchDebugSession | null>(null);
 
@@ -136,10 +142,38 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
     }
 
     if (previous === input.state) return;
-    const newLogLines = input.state.log.slice(previousLogCount);
+    const resetTransition = isBattleResetTransition(previous, input.state);
+    const engineEvents = input.state.structuredEngineEvents ?? [];
+    const newEngineEvents = engineEvents.filter((event) => event.id > lastProcessedEngineEventIdRef.current && !(resetTransition && event.type === "BATTLE_STATE_RESET"));
+    if (engineEvents.length > 0) lastProcessedEngineEventIdRef.current = Math.max(...engineEvents.map((event) => event.id));
+    newEngineEvents.forEach((event) => {
+      record({
+        source: event.type === "BATTLE_STATE_RESET" ? "system" : "engine",
+        category: event.type === "BATTLE_STATE_RESET" || event.type === "BATTLE_ENDED" ? "match" : "effect",
+        actionType: event.type,
+        message: event.message,
+        metadata: event.payload,
+      });
+    });
+    const newLogLines = resetTransition ? [] : input.state.log.slice(previousLogCount);
     const before = createMatchDebugStateSummary(previous);
     const after = createMatchDebugStateSummary(input.state);
-    const changes = diffMatchStates(before, after, undefined, newLogLines);
+    const changes = resetTransition ? [] : diffMatchStates(before, after, undefined, newLogLines);
+
+    if (resetTransition) {
+      const score = input.state.seriesScore ?? { player: 0, enemy: 0 };
+      record({
+        source: "system",
+        category: "match",
+        actionType: "BATTLE_STATE_RESET",
+        message: `Reason: next_battle. Old zones archived. Cards returned to original owners. Decks rebuilt. New card instances created. New hands drawn. Preserved score: ${score.player}:${score.enemy}.`,
+        before,
+        after,
+        metadata: { reason: "next_battle", previousBattle: previous.battleNumber, newBattle: input.state.battleNumber },
+      });
+      previousStateRef.current = input.state;
+      return;
+    }
 
     if (changes.length > 0) {
       record({ source: "engine", category: "state", message: `State changed (${changes.length} changes).`, before, after, changes });

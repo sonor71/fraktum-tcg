@@ -4,6 +4,8 @@ import type {
   CardInstance,
   MatchState,
   PlayerId,
+  PlayerState,
+  EngineEvent,
   StartMatchPayload,
   TargetRef,
 } from "../core/types";
@@ -32,6 +34,7 @@ import {
 
 import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, NO_CARD_PENALTY_DAMAGE, BASE_TURN_SECONDS, DECK_SIZE, FATE_ROULETTE_EVENTS, getD20PlayLimit, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
 const LOG_LIMIT = 80;
+const ENGINE_EVENT_LIMIT = 200;
 
 type WillMatchConfig = {
   maxWill?: number;
@@ -98,6 +101,15 @@ const inst = (definition: CardDefinition, ownerId: PlayerId, index: number): Car
 
 function log(state: MatchState, message: string): MatchState {
   return { ...state, log: [...state.log, message].slice(-LOG_LIMIT) };
+}
+
+function addEngineEvent(state: MatchState, type: string, message: string, payload?: Record<string, unknown>): MatchState {
+  const id = (state.engineEventSequence ?? 0) + 1;
+  return {
+    ...state,
+    engineEventSequence: id,
+    structuredEngineEvents: [...(state.structuredEngineEvents ?? []), { id, type, message, payload }].slice(-ENGINE_EVENT_LIMIT),
+  };
 }
 
 function findPreferredHero(id: PlayerId, defs: CardDefinition[], fallbackDefs: CardDefinition[]) {
@@ -248,7 +260,7 @@ function setSideEffects(state: MatchState, playerId: PlayerId, effects: Array<Re
     ...state,
     [playerId]: {
       ...state[playerId],
-      effects: effects as any,
+      effects: effects as unknown as PlayerState["effects"],
     },
   };
 }
@@ -403,8 +415,8 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
       : defs.map((card) => (card.id === "brian" ? defs.find((definition) => definition.id === "felix") ?? card : card));
 
   let seed = payload.seed ?? 12345;
-  let playerSide: any = makeSide("player", playerDeck, defs, playerWillConfig);
-  let enemySide: any = makeSide("enemy", enemyDeck, defs, enemyWillConfig);
+  let playerSide: PlayerState = makeSide("player", playerDeck, defs, playerWillConfig);
+  let enemySide: PlayerState = makeSide("enemy", enemyDeck, defs, enemyWillConfig);
   const playerShuffle = shuffleWithSeed(playerSide.deck, seed);
   seed = playerShuffle.seed;
   const enemyShuffle = shuffleWithSeed(enemySide.deck, seed);
@@ -449,6 +461,8 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
     seriesScore: { player: 0, enemy: 0 },
     caduceusUsed: false,
     rouletteUsedThisBattle: false,
+    engineEventSequence: safeInteger(payloadRecord.engineEventSequence, 0),
+    structuredEngineEvents: Array.isArray(payloadRecord.structuredEngineEvents) ? payloadRecord.structuredEngineEvents as EngineEvent[] : [],
   };
 
   state = initializeBattleWill(state, firstPlayerId);
@@ -477,7 +491,7 @@ function startNextBattle(state: MatchState, scores: Record<PlayerId, number>, re
     enemyWillStats: { maxWill: state.enemy.maxWill, regenPerRound: state.enemy.willRegenPerRound },
   } as StartMatchPayload);
 
-  return log({
+  return addEngineEvent(log({
     ...nextBattle,
     id: state.id,
     battleNumber: nextBattleNumber,
@@ -488,19 +502,23 @@ function startNextBattle(state: MatchState, scores: Record<PlayerId, number>, re
     rouletteOwnerId: undefined,
     rouletteExpiresBeforeOwnerPersonalTurn: undefined,
     battleResult: undefined,
-  }, `${reason} Previous battle: ${previousBattle}. New battle: ${nextBattleNumber}. Preserved score: ${scores.player}:${scores.enemy}. Next battle starts.`);
+    engineEventSequence: state.engineEventSequence,
+    structuredEngineEvents: state.structuredEngineEvents ?? [],
+  }, `${reason} Previous battle: ${previousBattle}. New battle: ${nextBattleNumber}. Preserved score: ${scores.player}:${scores.enemy}. Player HP restored: ${nextBattle.player.hp}. Enemy HP restored: ${nextBattle.enemy.hp}. Zones rebuilt. Decks shuffled. Initiative determined.`), "BATTLE_STATE_RESET", `Previous battle: ${previousBattle}. New battle: ${nextBattleNumber}. Preserved score: ${scores.player}:${scores.enemy}. Player HP restored: ${nextBattle.player.hp}. Enemy HP restored: ${nextBattle.enemy.hp}. Zones rebuilt. Decks shuffled. Initiative determined.`, { previousBattle, newBattle: nextBattleNumber, score: { ...scores }, reason: "next_battle" });
 }
 
 function finishBattle(state: MatchState, result: PlayerId | "draw", reason: string): MatchState {
   const scores = scoreBattleResult(state.seriesScore ?? { player: 0, enemy: 0 }, result);
   const matchWinner = getMatchWinner(scores);
-  const scoredState = { ...state, seriesScore: scores, battleResult: result };
+  const previousScores = state.seriesScore ?? { player: 0, enemy: 0 };
+  const battle = state.battleNumber ?? 1;
+  const scoredState = addEngineEvent({ ...state, seriesScore: scores, battleResult: result }, "BATTLE_ENDED", `Battle: ${battle}. Result: ${result}. Reason: ${reason}. Score before: ${previousScores.player}:${previousScores.enemy}. Score after: ${scores.player}:${scores.enemy}.`, { battle, result, reason, scoreBefore: { ...previousScores }, scoreAfter: { ...scores } });
 
   if (!matchWinner) {
-    return log({ ...scoredState, phase: "betweenBattles", battleEndReason: reason }, `BATTLE_ENDED Result: ${result}. Battle: ${state.battleNumber ?? 1}. Score: ${scores.player}:${scores.enemy}. Reason: ${reason} BETWEEN_BATTLES_SCREEN_OPENED`);
+    return log({ ...scoredState, phase: "betweenBattles", battleEndReason: reason }, `BATTLE_ENDED Result: ${result}. Battle: ${battle}. Score before: ${previousScores.player}:${previousScores.enemy}. Score after: ${scores.player}:${scores.enemy}. Reason: ${reason} BETWEEN_BATTLES_SCREEN_OPENED`);
   }
 
-  return log({ ...scoredState, phase: "ended", winner: matchWinner, battleEndReason: reason }, `BATTLE_ENDED Result: ${result}. Battle: ${state.battleNumber ?? 1}. Score: ${scores.player}:${scores.enemy}. Reason: ${reason} Match result: ${matchWinner}.`);
+  return log({ ...scoredState, phase: "ended", winner: matchWinner, battleEndReason: reason }, `BATTLE_ENDED Result: ${result}. Battle: ${battle}. Score before: ${previousScores.player}:${previousScores.enemy}. Score after: ${scores.player}:${scores.enemy}. Reason: ${reason} Match result: ${matchWinner}.`);
 }
 
 export function resolveCaduceusBattleDraw(state: MatchState, sourceName = "Caduceus"): MatchState {
@@ -682,7 +700,7 @@ export function playCard(
   }
 
   const ownerPersonalTurn = side.personalTurnsTaken ?? 0;
-  const playedCard = { ...normalizePlayedCard(card, state.turn), ownerPersonalTurnPlayed: ownerPersonalTurn, attackReadyFromOwnerPersonalTurn: getCardBoardMaxHp(card) > 0 ? ownerPersonalTurn + 1 : undefined, slotIndex: requiresSlot ? slotIndex : undefined, controllerId: playerId, originalOwnerId: card.originalOwnerId ?? card.ownerId };
+  const playedCard = { ...normalizePlayedCard(card, state.turn), playedOnOwnerPersonalTurn: ownerPersonalTurn, ownerPersonalTurnPlayed: ownerPersonalTurn, attackReadyFromOwnerPersonalTurn: getCardBoardMaxHp(card) > 0 ? ownerPersonalTurn + 1 : undefined, slotIndex: requiresSlot ? slotIndex : undefined, controllerId: playerId, originalOwnerId: card.originalOwnerId ?? card.ownerId };
   if (requiresSlot) currentSlots[slotIndex] = playedCard;
 
   const paidSide = payWill(side, cost);

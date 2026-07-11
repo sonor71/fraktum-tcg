@@ -734,9 +734,9 @@ export default function MatchPage() {
   const submitGameAction = useCallback(async (action: GameAction) => {
     const before = createMatchDebugStateSummary(stateRef.current);
     recordDebug({
-      source: isOnlineMode ? "online_local" : action.type === "AI_TURN" ? "ai" : "player",
+      source: action.type === "START_NEXT_BATTLE" || action.type === "START_MATCH" ? "system" : isOnlineMode ? "online_local" : action.type === "AI_TURN" ? "ai" : "player",
       category: "action",
-      actionType: action.type,
+      actionType: action.type === "START_NEXT_BATTLE" ? "START_NEXT_BATTLE_REQUESTED" : action.type,
       message: `${isOnlineMode ? "Queue online" : "Dispatch local"} action ${action.type}.`,
       action,
       before,
