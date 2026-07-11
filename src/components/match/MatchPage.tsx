@@ -5,6 +5,9 @@ import type { CardDefinition, CardInstance, StartMatchPayload } from "../../game
 import { createInitialMatchState, dispatch } from "../../game/engine/MatchEngine";
 import { canPlayerMakeAnyMove, cardRequiresBoardSlot } from "../../game/engine/TurnManager";
 import { MatchBoard } from "./MatchBoard";
+import { MatchDebugConsole } from "./debug/MatchDebugConsole";
+import { useMatchDebugRecorder } from "./debug/useMatchDebugRecorder";
+import { createMatchDebugStateSummary, sanitizeDebugValue } from "./debug/matchDebugUtils";
 import {
   getMatchRewardValues,
   getWillStatsFromUpgrades,
@@ -555,6 +558,19 @@ export default function MatchPage() {
   const onlineSeatRef = useRef<OnlineSeat | null>(null);
   const startedOnlineRoomId = useRef<string | null>(null);
 
+  const onlineOpponent = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
+  const opponentDisplayName = isOnlineMode ? onlineOpponent?.playerName ?? "Opponent" : null;
+  const opponentRankLabel = isOnlineMode ? `RANK ${onlineOpponent?.level ?? "III"}` : null;
+  const debugRecorder = useMatchDebugRecorder({
+    enabled: true,
+    state,
+    matchMode: isOnlineMode ? "online" : "ai",
+    roomId: onlineRoom?.id,
+    seat: onlineSeat,
+    playerNames: { player: playerName || "Player", enemy: opponentDisplayName ?? "AI" },
+  });
+  const recordDebug = debugRecorder.record;
+
   useEffect(() => {
     stateRef.current = state;
 
@@ -693,32 +709,90 @@ export default function MatchPage() {
     });
 
     for (const event of sorted) {
-      if (!event?.id || processedOnlineActionIds.current.has(event.id)) continue;
+      const duplicate = Boolean(event?.id && processedOnlineActionIds.current.has(event.id));
+      const mappedAction = mapOnlineActionForLocalClient(event, seat);
+      const createdAtMs = new Date(event.created_at || 0).getTime();
+      recordDebug({
+        source: duplicate ? "warning" : "online_remote",
+        level: duplicate ? "warning" : "info",
+        category: "online",
+        actionType: duplicate ? "ONLINE_DUPLICATE_IGNORED" : "ONLINE_REMOTE_RECEIVE",
+        message: duplicate ? `Duplicate online event ignored: ${event.id}` : `Online event received from seat ${event.actor_seat}.`,
+        action: event.action,
+        before: createMatchDebugStateSummary(stateRef.current),
+        metadata: {
+          eventId: event.id,
+          actorSeat: event.actor_seat,
+          createdAt: event.created_at,
+          latencyMs: Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : undefined,
+          mappedAction,
+          duplicate,
+          rejected: !mappedAction,
+        },
+      });
+      if (!event?.id || duplicate) continue;
       processedOnlineActionIds.current.add(event.id);
 
-      const mappedAction = mapOnlineActionForLocalClient(event, seat);
       if (!mappedAction) continue;
       send(mappedAction);
     }
-  }, []);
+  }, [recordDebug]);
 
   const submitGameAction = useCallback(async (action: GameAction) => {
+    const before = createMatchDebugStateSummary(stateRef.current);
+    recordDebug({
+      source: isOnlineMode ? "online_local" : action.type === "AI_TURN" ? "ai" : "player",
+      category: "action",
+      actionType: action.type,
+      message: `${isOnlineMode ? "Queue online" : "Dispatch local"} action ${action.type}.`,
+      action,
+      before,
+    });
+
     if (!isOnlineMode || !onlineRoom?.id || !onlineSeat || onlineQueueState !== "matched") {
       send(action);
       return;
     }
+
+    const clientActionId = makeClientActionId();
+    recordDebug({
+      source: "online_local",
+      category: "online",
+      actionType: "ONLINE_LOCAL_SEND",
+      message: `Sending online action ${action.type}.`,
+      action,
+      before,
+      metadata: { roomId: onlineRoom.id, seat: onlineSeat, clientActionId, sentAt: Date.now() },
+    });
 
     try {
       await appendOnlineMatchAction({
         roomId: onlineRoom.id,
         seat: onlineSeat,
         action,
-        clientActionId: makeClientActionId(),
+        clientActionId,
+      });
+      recordDebug({
+        source: "online_local",
+        category: "online",
+        actionType: "ONLINE_LOCAL_CONFIRMED",
+        message: `Online action ${action.type} confirmed by backend.`,
+        action,
+        metadata: { roomId: onlineRoom.id, seat: onlineSeat, clientActionId },
       });
     } catch (error) {
+      recordDebug({
+        source: "online_local",
+        level: "error",
+        category: "online",
+        actionType: "ONLINE_LOCAL_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+        action,
+        metadata: { roomId: onlineRoom.id, seat: onlineSeat, clientActionId, error: sanitizeDebugValue(error) },
+      });
       setUiLog((entries) => pushLimited(entries, `[WARN] Online action failed: ${error instanceof Error ? error.message : String(error)}`));
     }
-  }, [isOnlineMode, onlineQueueState, onlineRoom?.id, onlineSeat]);
+  }, [recordDebug, isOnlineMode, onlineQueueState, onlineRoom?.id, onlineSeat]);
 
   const clearPendingPlay = useCallback(() => {
     clearTimer(pendingPlayTimer);
@@ -729,6 +803,7 @@ export default function MatchPage() {
     const problem = validatePlay(currentState, cardInstanceId, slotIndex);
 
     if (problem) {
+      recordDebug({ source: "warning", level: "warning", category: "action", actionType: "PLAY_CARD_INVALID", message: problem, before: createMatchDebugStateSummary(currentState), metadata: { cardInstanceId, slotIndex } });
       addUiLog(problem);
       setSelectedCardId(null);
       return;
@@ -742,18 +817,20 @@ export default function MatchPage() {
     } as GameAction);
 
     setSelectedCardId(null);
-  }, [addUiLog, submitGameAction]);
+  }, [addUiLog, recordDebug, submitGameAction]);
 
   const playCard = useCallback((cardInstanceId: string, slotIndex: number) => {
     const currentState = stateRef.current;
     const problem = validatePlay(currentState, cardInstanceId, slotIndex);
 
     if (problem) {
+      recordDebug({ source: "warning", level: "warning", category: "action", actionType: "PLAY_CARD_INVALID", message: problem, before: createMatchDebugStateSummary(currentState), metadata: { cardInstanceId, slotIndex } });
       addUiLog(problem);
       setSelectedCardId(null);
       return;
     }
 
+    recordDebug({ source: "player", category: "card", actionType: "CARD_SELECTED", message: `Selected card ${cardInstanceId} for slot ${slotIndex + 1}.`, before: createMatchDebugStateSummary(currentState), metadata: { cardInstanceId, slotIndex } });
     setSelectedCardId(cardInstanceId);
     clearPendingPlay();
 
@@ -761,13 +838,14 @@ export default function MatchPage() {
       pendingPlayTimer.current = null;
       commitPlay(cardInstanceId, slotIndex);
     }, PLAY_COMMIT_DELAY_MS);
-  }, [addUiLog, clearPendingPlay, commitPlay]);
+  }, [addUiLog, clearPendingPlay, commitPlay, recordDebug]);
 
   const handleRoll = useCallback(() => {
     const currentState = stateRef.current;
     if (currentState.winner) return;
 
     if (currentState.activePlayerId !== "player" || currentState.phase !== "roll") {
+      recordDebug({ source: "warning", level: "warning", category: "roll", actionType: "ROLL_D20_INVALID", message: "D20 can be rolled only during your roll phase.", before: createMatchDebugStateSummary(currentState) });
       addUiLog("D20 can be rolled only during your roll phase.");
       return;
     }
@@ -775,7 +853,7 @@ export default function MatchPage() {
     setSelectedCardId(null);
     clearPendingPlay();
     void submitGameAction({ type: "ROLL_D20", playerId: "player" } as GameAction);
-  }, [addUiLog, clearPendingPlay, submitGameAction]);
+  }, [addUiLog, clearPendingPlay, recordDebug, submitGameAction]);
 
   const handleEndTurn = useCallback(() => {
     const currentState = stateRef.current;
@@ -783,11 +861,13 @@ export default function MatchPage() {
     if (currentState.winner) return;
 
     if (currentState.activePlayerId !== "player") {
+      recordDebug({ source: "warning", level: "warning", category: "turn", actionType: "END_TURN_INVALID", message: "It is not your turn.", before: createMatchDebugStateSummary(currentState) });
       addUiLog("It is not your turn.");
       return;
     }
 
     if (currentState.phase !== "main") {
+      recordDebug({ source: "warning", level: "warning", category: "turn", actionType: "END_TURN_INVALID", message: "Roll D20 first. End turn is available after the main phase starts.", before: createMatchDebugStateSummary(currentState) });
       addUiLog("Roll D20 first. End turn is available after the main phase starts.");
       return;
     }
@@ -795,7 +875,7 @@ export default function MatchPage() {
     setSelectedCardId(null);
     clearPendingPlay();
     void submitGameAction({ type: "END_TURN", playerId: "player" } as GameAction);
-  }, [addUiLog, clearPendingPlay, submitGameAction]);
+  }, [addUiLog, clearPendingPlay, recordDebug, submitGameAction]);
 
   const handleAiTurn = useCallback(() => {
     const currentState = stateRef.current;
@@ -811,8 +891,9 @@ export default function MatchPage() {
     clearPendingPlay();
     clearTimer(aiTurnTimer);
     setAiThinking(false);
+    recordDebug({ source: "ai", category: "action", actionType: "AI_TURN_START", message: "Manual AI turn dispatch requested.", before: createMatchDebugStateSummary(currentState) });
     send({ type: "AI_TURN" });
-  }, [addUiLog, clearPendingPlay]);
+  }, [addUiLog, clearPendingPlay, recordDebug]);
 
   const handleRestart = useCallback(() => {
     clearTimer(pendingPlayTimer);
@@ -838,11 +919,12 @@ export default function MatchPage() {
     setMatchReward(null);
     rewardedMatchId.current = null;
     setAiThinking(false);
+    recordDebug({ source: "player", category: "match", actionType: "RESTART", message: "Player restarted match.", before: createMatchDebugStateSummary(stateRef.current) });
     send({
       type: "START_MATCH",
       payload: buildMatchPayloadFromDeck(ownedCards, deckIds, getWillStatsFromUpgrades(willUpgrades), Date.now()),
     } as GameAction);
-  }, [deckIds, ownedCards, willUpgrades]);
+  }, [recordDebug, deckIds, ownedCards, willUpgrades]);
 
   const handleReturnToMenu = useCallback(() => {
     clearTimer(pendingPlayTimer);
@@ -897,6 +979,7 @@ export default function MatchPage() {
     setOnlineQueueMessage(`Opponent found: ${opponent?.playerName ?? "unknown player"}.`);
     setUiLog((entries) => pushLimited(entries, `[SYS] Online room ${room.id.slice(0, 8)} matched. You are seat ${seat.toUpperCase()}.`));
     setUiLog((entries) => pushLimited(entries, `[SYS] ${own?.playerName ?? "You"} vs ${opponent?.playerName ?? "Opponent"}. Realtime action sync enabled.`));
+    recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_ROOM_MATCHED", message: `Online room matched with ${opponent?.playerName ?? "Opponent"}.`, metadata: { roomId: room.id, seat, opponentName: opponent?.playerName, ownName: own?.playerName } });
 
     send({
       type: "START_MATCH",
@@ -908,7 +991,7 @@ export default function MatchPage() {
     } catch (error) {
       setUiLog((entries) => pushLimited(entries, `[WARN] Could not mark online room as playing: ${error instanceof Error ? error.message : String(error)}`));
     }
-  }, [willUpgrades]);
+  }, [recordDebug, willUpgrades]);
 
   const startOnlineSearch = useCallback(async () => {
     clearTimer(onlineQueueTimer);
@@ -924,12 +1007,14 @@ export default function MatchPage() {
 
     setOnlineQueueState("searching");
     setOnlineQueueMessage("Connecting to Supabase matchmaking queue...");
+    recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_SEARCH_START", message: "Online matchmaking search started." });
 
     try {
       const willStats = getWillStatsFromUpgrades(willUpgrades);
       const snapshot = buildOnlinePlayerSnapshot(playerName, ownedCards, deckIds, willStats, level, avatar);
 
       const result = await joinOnlineMatchmaking(snapshot);
+      recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_ROOM_FOUND", message: `Online room ${result.room.id.slice(0, 8)} found as seat ${result.seat.toUpperCase()}.`, metadata: { roomId: result.room.id, seat: result.seat, status: result.room.status } });
       setOnlineRoom(result.room);
       setOnlineSeat(result.seat);
 
@@ -939,6 +1024,7 @@ export default function MatchPage() {
       }
 
       setOnlineQueueMessage(`Waiting for opponent. Room ${result.room.id.slice(0, 8)} created.`);
+      recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_REALTIME_SUBSCRIBE", message: "Subscribing to online room realtime updates.", metadata: { roomId: result.room.id } });
       onlineRoomUnsubscribe.current = subscribeToOnlineMatchRoom(
         result.room.id,
         (nextRoom) => {
@@ -952,6 +1038,7 @@ export default function MatchPage() {
         },
       );
 
+      recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_POLLING_FALLBACK", message: "Online room polling fallback started.", metadata: { roomId: result.room.id, intervalMs: 2500 } });
       const pollTimer = window.setInterval(async () => {
         try {
           const nextRoom = await fetchOnlineMatchRoom(result.room.id);
@@ -968,10 +1055,11 @@ export default function MatchPage() {
 
       onlineQueueTimer.current = pollTimer as unknown as number;
     } catch (error) {
+      recordDebug({ source: "online_local", level: "error", category: "online", actionType: "ONLINE_SEARCH_ERROR", message: error instanceof Error ? error.message : String(error), metadata: { error: sanitizeDebugValue(error) } });
       setOnlineQueueState("error");
       setOnlineQueueMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [avatar, deckIds, level, ownedCards, playerName, startOnlineRoomMatch, willUpgrades]);
+  }, [avatar, recordDebug, deckIds, level, ownedCards, playerName, startOnlineRoomMatch, willUpgrades]);
 
   const cancelOnlineSearch = useCallback(async () => {
     clearTimer(onlineQueueTimer);
@@ -984,6 +1072,7 @@ export default function MatchPage() {
     startedOnlineRoomId.current = null;
     setOnlineQueueState("idle");
     setOnlineQueueMessage("Search cancelled.");
+    recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_SEARCH_CANCEL", message: "Online matchmaking search cancelled.", metadata: { roomId } });
 
     if (!roomId) return;
 
@@ -992,7 +1081,7 @@ export default function MatchPage() {
     } catch (error) {
       setOnlineQueueMessage(`Search cancelled locally. Server cancel failed: ${error instanceof Error ? error.message : String(error)}`);
     }
-  }, [onlineRoom?.id]);
+  }, [recordDebug, onlineRoom?.id]);
 
   const handleInvalidDrop = useCallback((message: string) => {
     addUiLog(message || "Invalid target.");
@@ -1016,13 +1105,15 @@ export default function MatchPage() {
     aiTurnTimer.current = window.setTimeout(() => {
       aiTurnTimer.current = null;
       setAiThinking(false);
+      const currentState = stateRef.current;
+      recordDebug({ source: "ai", category: "action", actionType: "AI_TURN_START", message: "Automatic AI turn started.", before: createMatchDebugStateSummary(currentState) });
       send({ type: "AI_TURN" });
     }, AUTO_AI_DELAY_MS);
 
     return () => {
       clearTimer(aiTurnTimer);
     };
-  }, [isOnlineMode, state.activePlayerId, state.phase, state.turn, state.winner]);
+  }, [recordDebug, isOnlineMode, state.activePlayerId, state.phase, state.turn, state.winner]);
 
   useEffect(() => {
     clearTimer(autoPlayerTurnTimer);
@@ -1044,13 +1135,14 @@ export default function MatchPage() {
       const currentState = stateRef.current;
       if (currentState.winner || currentState.activePlayerId !== "player" || currentState.phase !== "main") return;
       if (hasPlayablePlayerCard(currentState)) return;
+      recordDebug({ source: "system", category: "turn", actionType: "AUTO_END_TURN", message: "Auto ending player turn: no legal moves remain.", before: createMatchDebugStateSummary(currentState) });
       void submitGameAction({ type: "END_TURN", playerId: "player" } as GameAction);
     }, AUTO_PLAYER_PASS_EMPTY_MS);
 
     return () => {
       clearTimer(autoPlayerTurnTimer);
     };
-  }, [state]);
+  }, [recordDebug, state, submitGameAction]);
 
   useEffect(() => {
     onlineActionUnsubscribe.current?.();
@@ -1167,6 +1259,18 @@ export default function MatchPage() {
             <button className="matchGhostButton" type="button" onClick={() => nav("/play")}>Back</button>
           </div>
         </section>
+        <MatchDebugConsole
+          enabled={debugRecorder.enabled}
+          isOpen={debugRecorder.isOpen}
+          onToggle={() => debugRecorder.setIsOpen((current) => !current)}
+          events={debugRecorder.events}
+          textLog={debugRecorder.textLog}
+          exportSession={debugRecorder.exportSession}
+          onSnapshot={debugRecorder.addSnapshot}
+          onClearView={debugRecorder.clearView}
+          previousSessions={debugRecorder.previousSessions}
+          onRefreshPreviousSessions={debugRecorder.refreshPreviousSessions}
+        />
       </main>
     );
   }
@@ -1202,6 +1306,18 @@ export default function MatchPage() {
         matchMode={matchMode}
         opponentName={opponentDisplayName}
         opponentRankLabel={opponentRankLabel}
+      />
+      <MatchDebugConsole
+        enabled={debugRecorder.enabled}
+        isOpen={debugRecorder.isOpen}
+        onToggle={() => debugRecorder.setIsOpen((current) => !current)}
+        events={debugRecorder.events}
+        textLog={debugRecorder.textLog}
+        exportSession={debugRecorder.exportSession}
+        onSnapshot={debugRecorder.addSnapshot}
+        onClearView={debugRecorder.clearView}
+        previousSessions={debugRecorder.previousSessions}
+        onRefreshPreviousSessions={debugRecorder.refreshPreviousSessions}
       />
     </main>
   );
