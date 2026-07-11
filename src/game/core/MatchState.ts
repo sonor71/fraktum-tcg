@@ -1,1 +1,1 @@
-export type { ActiveEffect, CardDefinition, CardEffect, CardInstance, CardRarity, CardType, EffectTarget, MatchPhase, MatchState, PendingEffect, PlayerId, PlayerState, StartMatchPayload, TargetRef } from "./types";
+export type { ActiveEffect, CardDefinition, CardEffect, CardInstance, CardRarity, CardType, EffectTarget, FateRouletteEvent, FateRouletteStage, FateRouletteState, MatchPhase, MatchState, PendingEffect, PlayerId, PlayerState, StartMatchPayload, TargetRef } from "./types";

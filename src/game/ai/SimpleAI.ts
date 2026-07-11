@@ -1,6 +1,7 @@
 import type { GameAction } from "../core/GameAction";
 import type { CardInstance, MatchState } from "../core/types";
-import { endTurn, playCard, rollD20 } from "../engine/MatchEngine";
+import { confirmFateRouletteResult, endTurn, playBlindTopCard, playCard, rollD20 } from "../engine/MatchEngine";
+import { spinFateRoulette } from "../engine/FateRoulette";
 import {
   canPlayerMakeAnyMove,
   cardRequiresBoardSlot,
@@ -52,8 +53,22 @@ function chooseAiCard(state: MatchState): CardInstance | undefined {
 }
 
 export function planNextAiAction(state: MatchState): GameAction | null {
-  if (state.activePlayerId !== "enemy" || state.winner || state.phase !== "enemy") return null;
+  if (state.winner) return null;
+  if (state.phase === "roulette") {
+    const roulette = state.rouletteState;
+    if (!roulette || roulette.ownerId !== "enemy") return null;
+    if (roulette.stage === "awaitingSpin") return { type: "SPIN_FATE_ROULETTE", playerId: "enemy", rouletteId: roulette.id };
+    if (roulette.stage === "result") return { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: roulette.id };
+    return null;
+  }
+  if (state.activePlayerId !== "enemy" || state.phase !== "enemy") return null;
   if (!state.currentTurn || state.currentTurn.playerId !== "enemy") return { type: "ROLL_D20", playerId: "enemy" };
+
+  if (state.activeRouletteEvent === "BLIND_TOP") {
+    const top = state.sharedDeck?.[0] ?? state.enemy.deck[0];
+    if (!top) return { type: "END_TURN", playerId: "enemy" };
+    return { type: "PLAY_BLIND_TOP_CARD", playerId: "enemy", target: { type: "slot", playerId: "enemy" } };
+  }
 
   if (!canPlayerMakeAnyMove(state, "enemy")) return { type: "END_TURN", playerId: "enemy" };
 
@@ -81,6 +96,9 @@ export function runSimpleAI(state: MatchState): MatchState {
     const action = planNextAiAction(next);
     if (!action) return next;
     if (action.type === "ROLL_D20") next = rollD20(next, "enemy");
+    else if (action.type === "SPIN_FATE_ROULETTE") next = spinFateRoulette(next, "enemy", action.rouletteId);
+    else if (action.type === "CONFIRM_FATE_ROULETTE_RESULT") next = confirmFateRouletteResult(next, "enemy", action.rouletteId);
+    else if (action.type === "PLAY_BLIND_TOP_CARD") next = playBlindTopCard(next, "enemy", action.target);
     else if (action.type === "PLAY_CARD") {
       const beforeWill = next.enemy.will;
       const chosen = next.enemy.hand.find((card) => card.instanceId === action.cardInstanceId);

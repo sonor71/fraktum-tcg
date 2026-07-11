@@ -32,7 +32,8 @@ import {
   slotsKey,
 } from "./TurnManager";
 
-import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, NO_CARD_PENALTY_DAMAGE, BASE_TURN_SECONDS, DECK_SIZE, FATE_ROULETTE_EVENTS, getD20PlayLimit, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
+import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, NO_CARD_PENALTY_DAMAGE, BASE_TURN_SECONDS, DECK_SIZE, getD20PlayLimit, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
+import { addRouletteEvent, applyFateRouletteEvent, createFateRouletteState, revealFateRouletteResult, spinFateRoulette } from "./FateRoulette";
 const LOG_LIMIT = 80;
 const ENGINE_EVENT_LIMIT = 200;
 
@@ -232,10 +233,26 @@ function drawUpToHandSize(state: MatchState, playerId: PlayerId, handSize = STAR
     return state;
   }
 
-  const sideAfter = drawCards(sideBefore, cardsNeeded);
+  let sideAfter = sideBefore;
+  let sharedDeck = state.sharedDeck;
+  const drawnFromShared: CardInstance[] = [];
+  if (sharedDeck) {
+    const deck = [...sharedDeck];
+    const hand = [...sideBefore.hand];
+    for (let index = 0; index < cardsNeeded && hand.length < handSize; index += 1) {
+      const card = deck.shift();
+      if (!card) break;
+      hand.push({ ...card, controllerId: playerId, originalOwnerId: card.originalOwnerId ?? card.ownerId });
+      drawnFromShared.push(card);
+    }
+    sharedDeck = deck;
+    sideAfter = { ...sideBefore, hand };
+  } else {
+    sideAfter = drawCards(sideBefore, cardsNeeded);
+  }
   const drawnCards = sideAfter.hand.slice(beforeHand);
   const drawnCount = drawnCards.length;
-  let next: MatchState = { ...state, [playerId]: sideAfter };
+  let next: MatchState = { ...state, [playerId]: sideAfter, sharedDeck };
 
   if (drawnCount === 1) {
     const drawnName = drawnCards[0]?.definition.title ?? drawnCards[0]?.definition.ruTitle ?? drawnCards[0]?.baseId ?? "a card";
@@ -539,6 +556,14 @@ export function dispatch(state: MatchState, action: GameAction): MatchState {
         return rollD20(state, action.playerId);
       case "PLAY_CARD":
         return playCard(state, action.playerId, action.cardInstanceId, action.target);
+      case "PLAY_BLIND_TOP_CARD":
+        return playBlindTopCard(state, action.playerId, action.target);
+      case "SPIN_FATE_ROULETTE":
+        return spinFateRoulette(state, action.playerId, action.rouletteId);
+      case "REVEAL_FATE_ROULETTE_RESULT":
+        return revealFateRouletteResult(state, action.playerId, action.rouletteId);
+      case "CONFIRM_FATE_ROULETTE_RESULT":
+        return confirmFateRouletteResult(state, action.playerId, action.rouletteId);
       case "DESTROY_OWN_CARD":
         return destroyOwnCard(state, action.playerId, action.slotIndex);
       case "END_TURN":
@@ -566,8 +591,10 @@ function beginTurnIfNeeded(state: MatchState, playerId: PlayerId): MatchState {
   const sameTurn = state.currentTurn?.playerId === playerId;
   if (sameTurn) return state;
   let next = state;
-  if (next.activeRouletteEvent === "WORLD_WITHOUT_WILL" && next.rouletteOwnerId === playerId && (next[playerId].personalTurnsTaken ?? 0) >= (next.rouletteExpiresBeforeOwnerPersonalTurn ?? Number.POSITIVE_INFINITY)) {
-    next = log({ ...next, activeRouletteEvent: undefined, rouletteOwnerId: undefined, rouletteExpiresBeforeOwnerPersonalTurn: undefined }, `[ROULETTE_END] Event expired before ${playerLabel(playerId)} turn.`);
+  if (["WORLD_WITHOUT_WILL", "BLIND_TOP", "HIDDEN_HAND"].includes(String(next.activeRouletteEvent)) && next.rouletteOwnerId === playerId && (next[playerId].personalTurnsTaken ?? 0) >= (next.rouletteExpiresBeforeOwnerPersonalTurn ?? Number.POSITIVE_INFINITY)) {
+    const expired = next.activeRouletteEvent;
+    const eventType = expired === "WORLD_WITHOUT_WILL" ? "WORLD_WITHOUT_WILL_ENDED" : expired === "BLIND_TOP" ? "BLIND_TOP_ENDED" : "HIDDEN_HAND_ENDED";
+    next = addRouletteEvent(log({ ...next, activeRouletteEvent: undefined, rouletteOwnerId: undefined, rouletteExpiresBeforeOwnerPersonalTurn: undefined }, `[ROULETTE_END] ${expired} expired before ${playerLabel(playerId)} turn.`), eventType, `${expired} expired before owner turn.`, { ownerId: playerId });
   }
   next = triggerTurnStartEffects(next, playerId);
   next = regenerateWillForTurn(next, playerId);
@@ -575,27 +602,23 @@ function beginTurnIfNeeded(state: MatchState, playerId: PlayerId): MatchState {
   return next;
 }
 
-function rollD20ForLimit(state: MatchState): { state: MatchState; roll: number; rouletteActivated: boolean } {
+function rollD20ForLimit(state: MatchState, options: { allowRoulette: boolean } = { allowRoulette: true }): { state: MatchState; roll: number; rouletteActivated: boolean } {
   let roll = rollDie(state.rngSeed, 20);
   let next: MatchState = log({ ...state, rngSeed: roll.seed }, `[D20_INITIAL_ROLL] ${roll.value}.`);
-  let rouletteActivated = false;
 
-  if (isFateRouletteRoll(roll.value) && !next.rouletteUsedThisBattle) {
-    const eventRoll = rollDie(next.rngSeed, FATE_ROULETTE_EVENTS.length);
-    const event = FATE_ROULETTE_EVENTS[eventRoll.value - 1];
-    next = log({ ...next, rngSeed: eventRoll.seed, rouletteUsedThisBattle: true, activeRouletteEvent: event }, `[ROULETTE_STARTED] ${event}.`);
-    rouletteActivated = true;
+  if (options.allowRoulette && isFateRouletteRoll(roll.value) && !next.rouletteUsedThisBattle) {
+    return { state: next, roll: roll.value, rouletteActivated: true };
   }
 
   while (isFateRouletteRoll(roll.value)) {
     roll = rollDie(next.rngSeed, 20);
-    next = log({ ...next, rngSeed: roll.seed }, `[D20_LIMIT_REROLL] ${roll.value}.`);
+    next = addRouletteEvent(log({ ...next, rngSeed: roll.seed }, `[D20_LIMIT_REROLL] ${roll.value}.`), "D20_LIMIT_REROLL", `D20 limit rerolled: ${roll.value}.`, { roll: roll.value });
   }
 
   const limit = getD20PlayLimit(roll.value);
-  next = log(next, `[D20_LIMIT_SET] ${limit === "unlimited" ? "unlimited" : limit}.`);
+  next = addRouletteEvent(log(next, `[D20_LIMIT_SET] ${limit === "unlimited" ? "unlimited" : limit}.`), "D20_LIMIT_SET", `D20 play limit set: ${limit === "unlimited" ? "unlimited" : limit}.`, { roll: roll.value, limit });
 
-  return { state: next, roll: roll.value, rouletteActivated };
+  return { state: next, roll: roll.value, rouletteActivated: false };
 }
 
 export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
@@ -607,6 +630,24 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
   const skip = consumeSkipTurn(started, playerId);
   if (skip.skipped) return endTurn(skip.state, playerId);
   const result = rollD20ForLimit(skip.state);
+  if (result.rouletteActivated && isFateRouletteRoll(result.roll)) {
+    return createFateRouletteState({
+      ...result.state,
+      lastRoll: result.roll,
+      currentTurn: {
+        playerId,
+        d20Limit: "unlimited",
+        playsUsed: 0,
+        cardsPlayed: 0,
+        destroyedOwnCard: false,
+        freeCards: false,
+        rouletteResolvedThisTurn: false,
+        skipDamageApplied: false,
+        timerSeconds: state.currentTurn?.timerSeconds ?? BASE_TURN_SECONDS,
+        playedCosts: [],
+      },
+    }, playerId, result.roll);
+  }
   const d20Limit = getD20PlayLimit(result.roll);
   const freeCards = result.roll === 20 || result.state.activeRouletteEvent === "WORLD_WITHOUT_WILL";
   let afterRoll: MatchState = {
@@ -646,12 +687,71 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
   );
 }
 
+export function confirmFateRouletteResult(state: MatchState, playerId: PlayerId, rouletteId: string): MatchState {
+  const roulette = state.rouletteState;
+  if (!roulette || roulette.id !== rouletteId) return state;
+  if (roulette.ownerId !== playerId) return log(state, "Only the roulette owner can confirm this result.");
+  if (roulette.stage !== "result" || !roulette.event) return state;
+
+  let next = applyFateRouletteEvent(state, roulette.ownerId, roulette.event);
+  const reroll = rollD20ForLimit({ ...next, rouletteState: undefined }, { allowRoulette: false });
+  const d20Limit = getD20PlayLimit(reroll.roll);
+  next = {
+    ...reroll.state,
+    lastRoll: reroll.roll,
+    currentTurn: {
+      ...(reroll.state.currentTurn ?? { playerId: roulette.ownerId, playsUsed: 0, cardsPlayed: 0, destroyedOwnCard: false, skipDamageApplied: false, timerSeconds: BASE_TURN_SECONDS, playedCosts: [] }),
+      playerId: roulette.ownerId,
+      d20Limit,
+      freeCards: reroll.roll === 20 || reroll.state.activeRouletteEvent === "WORLD_WITHOUT_WILL",
+      rouletteResolvedThisTurn: true,
+    },
+  };
+  next = addRouletteEvent(next, "FIELD_COMBAT_STARTED", "Field combat started after Fate Roulette.", { ownerId: roulette.ownerId });
+  const afterCombat = checkWinCondition(moveDestroyedCardsToDiscard(resolveFieldCombat(next, roulette.ownerId)));
+  if (afterCombat.phase === "ended" || afterCombat.phase === "betweenBattles") return afterCombat;
+  return addRouletteEvent(log({ ...afterCombat, rouletteState: undefined, phase: roulette.ownerId === "player" ? "main" : "enemy" }, `[ROULETTE_CLOSED] ${playerLabel(roulette.ownerId)} continues after reroll ${reroll.roll}.`), "ROULETTE_CLOSED", "Fate Roulette closed; normal turn resumed.", { ownerId: roulette.ownerId, roll: reroll.roll, limit: d20Limit });
+}
+
+export function playBlindTopCard(state: MatchState, playerId: PlayerId, target?: TargetRef): MatchState {
+  if (state.activeRouletteEvent !== "BLIND_TOP") return log(state, "Blind Top is not active.");
+  if (state.activePlayerId !== playerId || (playerId === "player" && state.phase !== "main") || (playerId === "enemy" && state.phase !== "enemy")) return log(state, "Blind Top can be played only during your main phase.");
+  const turnState = state.currentTurn;
+  if (!turnState) return log(state, "No active turn for Blind Top.");
+  if (turnState.d20Limit !== "unlimited" && turnState.playsUsed >= turnState.d20Limit) return log(state, "D20 play limit has been reached.");
+  const sourceShared = Boolean(state.sharedDeck?.length);
+  const top = sourceShared ? state.sharedDeck?.[0] : state[playerId].deck[0];
+  if (!top) return log(state, "[BLIND_TOP] Колода пуста.");
+  const revealedState = addRouletteEvent(log(state, `[BLIND_TOP_CARD_REVEALED] ${playerLabel(playerId)} revealed ${getCardTitle(top)}.`), "BLIND_TOP_CARD_REVEALED", `${playerLabel(playerId)} revealed a blind top card.`, { playerId, cardId: top.instanceId, title: getCardTitle(top) });
+  const card = { ...top, controllerId: playerId, revealed: true };
+  const side = revealedState[playerId];
+  const cost = getEffectiveCardCost(revealedState, playerId, card);
+  if (!canPayWill(side, cost)) return log(revealedState, `[BLIND_TOP] Not enough Will for ${getCardTitle(card)}. Needs ${cost}, has ${side.will}.`);
+  const ownSlotsKey = slotsKey(playerId);
+  const currentSlots = [...revealedState.board[ownSlotsKey]];
+  const requiresSlot = cardRequiresBoardSlot(card);
+  const slotIndex = requiresSlot ? getRequestedOrFreeSlotIndex(revealedState, playerId, target) : -1;
+  const removeTop = (st: MatchState): MatchState => sourceShared ? { ...st, sharedDeck: (st.sharedDeck ?? []).slice(1) } : { ...st, [playerId]: { ...st[playerId], deck: st[playerId].deck.slice(1) } };
+  if (requiresSlot && (!isValidSlotIndex(slotIndex, currentSlots.length) || currentSlots[slotIndex])) {
+    const discarded = removeTop(revealedState);
+    return addRouletteEvent(log({ ...discarded, [playerId]: { ...discarded[playerId], discard: [...discarded[playerId].discard, card] }, currentTurn: { ...turnState, playsUsed: turnState.playsUsed + 1, cardsPlayed: turnState.cardsPlayed + 1 } }, `[BLIND_TOP_CARD_DISCARDED] ${getCardTitle(card)} had no valid slot/target.`), "BLIND_TOP_CARD_DISCARDED", "Blind Top card discarded because it could not be played.", { playerId, cardId: card.instanceId });
+  }
+  if (requiresSlot) currentSlots[slotIndex] = { ...normalizePlayedCard(card, state.turn), controllerId: playerId, originalOwnerId: card.originalOwnerId ?? card.ownerId, slotIndex };
+  const removed = removeTop(revealedState);
+  const paidSide = payWill(removed[playerId], cost);
+  let next: MatchState = { ...removed, board: { ...removed.board, [ownSlotsKey]: currentSlots }, [playerId]: { ...paidSide, discard: requiresSlot ? paidSide.discard : [...paidSide.discard, card] }, currentTurn: { ...turnState, playsUsed: turnState.playsUsed + 1, cardsPlayed: turnState.cardsPlayed + 1, playedCosts: [...turnState.playedCosts, { playerId, cardTitle: getCardTitle(card), cost }] } };
+  next = addRouletteEvent(log(next, `[BLIND_TOP_CARD_PLAYED] ${playerLabel(playerId)} played ${getCardTitle(card)} from the top.`), "BLIND_TOP_CARD_PLAYED", "Blind Top card played.", { playerId, cardId: card.instanceId });
+  next = resolveCardEffects(next, playerId, card, target, requiresSlot ? slotIndex : undefined);
+  return checkWinCondition(moveDestroyedCardsToDiscard(next));
+}
+
 export function playCard(
   state: MatchState,
   playerId: PlayerId,
   cardInstanceId: string,
   target?: TargetRef,
 ): MatchState {
+  if (state.phase === "roulette") return log(state, "Fate Roulette is resolving; cards are locked.");
   if (state.activePlayerId !== playerId) {
     return log(state, `It is not ${playerLabel(playerId)}'s turn.`);
   }
@@ -796,6 +896,7 @@ export function cleanupTemporaryCards(state: MatchState, onlyPlayerId?: PlayerId
 }
 
 export function endTurn(state: MatchState, playerId: PlayerId): MatchState {
+  if (state.phase === "roulette") return log(state, "Fate Roulette is resolving; the turn cannot end yet.");
   if (state.activePlayerId !== playerId) {
     return log(state, `It is not ${playerLabel(playerId)}'s turn.`);
   }

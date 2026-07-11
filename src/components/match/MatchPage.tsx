@@ -888,6 +888,19 @@ export default function MatchPage() {
     send({ type: "AI_TURN" });
   }, [addUiLog, clearPendingPlay, recordDebug]);
 
+
+  const handleRouletteSpin = useCallback((rouletteId: string) => {
+    void submitGameAction({ type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId } as GameAction);
+  }, [submitGameAction]);
+
+  const handleRouletteReveal = useCallback((rouletteId: string) => {
+    const ownerId = stateRef.current.rouletteState?.ownerId ?? "player";
+    void submitGameAction({ type: "REVEAL_FATE_ROULETTE_RESULT", playerId: ownerId, rouletteId } as GameAction);
+  }, [submitGameAction]);
+
+  const handleRouletteConfirm = useCallback((rouletteId: string) => {
+    void submitGameAction({ type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId } as GameAction);
+  }, [submitGameAction]);
   const handleRestart = useCallback(() => {
     clearTimer(pendingPlayTimer);
     clearTimer(aiTurnTimer);
@@ -1107,7 +1120,7 @@ export default function MatchPage() {
       return;
     }
 
-    if (state.activePlayerId !== "enemy" || state.phase !== "enemy" || state.winner) {
+    if (state.winner || (state.phase !== "enemy" && !(state.phase === "roulette" && state.rouletteState?.ownerId === "enemy"))) {
       setAiThinking(false);
       return;
     }
@@ -1118,6 +1131,10 @@ export default function MatchPage() {
       setAiThinking(false);
       const currentState = stateRef.current;
       const action = planNextAiAction(currentState);
+      if (currentState.phase === "roulette" && currentState.rouletteState?.stage === "spinning") {
+        setAiThinking(false);
+        return;
+      }
       if (!action) {
         recordDebug({
           source: "warning",
@@ -1316,6 +1333,9 @@ export default function MatchPage() {
         logEntries={mergedLog}
         onEndTurn={handleEndTurn}
         onAiTurn={handleAiTurn}
+        onRouletteSpin={handleRouletteSpin}
+        onRouletteReveal={handleRouletteReveal}
+        onRouletteConfirm={handleRouletteConfirm}
         onRestart={handleRestart}
         onStartNextBattle={handleStartNextBattle}
         onConcede={handleConcede}
