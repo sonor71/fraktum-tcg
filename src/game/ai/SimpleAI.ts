@@ -1,6 +1,8 @@
 import type { CardInstance, MatchState } from "../core/types";
 import { endTurn, playCard, rollD20 } from "../engine/MatchEngine";
 import {
+  canPlayerMakeAnyMove,
+  cardRequiresBoardSlot,
   getBestPlayableCard,
   getCardBoardMaxHp,
   getCardCost,
@@ -10,26 +12,10 @@ import {
   getPreferredFreeSlotIndex,
 } from "../engine/TurnManager";
 
-const AI_MAX_PLAYS_PER_TURN = 1;
+const AI_MAX_PLAYS_PER_TURN = 20;
 
 function addLog(state: MatchState, message: string): MatchState {
   return { ...state, log: [...state.log, message].slice(-80) };
-}
-
-function consumeSkipTurn(state: MatchState): { state: MatchState; skipped: boolean } {
-  const skip = state.enemy.effects.find((effect) => effect.id === "skip_next_turn");
-  if (!skip) return { state, skipped: false };
-
-  return {
-    skipped: true,
-    state: {
-      ...state,
-      enemy: {
-        ...state.enemy,
-        effects: state.enemy.effects.filter((effect) => effect !== skip),
-      },
-    },
-  };
 }
 
 function cardLooksAggressive(card: CardInstance) {
@@ -79,17 +65,12 @@ export function runSimpleAI(state: MatchState): MatchState {
 
   let next = state;
 
-  const skipCheck = consumeSkipTurn(next);
-  if (skipCheck.skipped) {
-    next = addLog(skipCheck.state, "AI skipped this turn due to an active effect.");
-    return endTurn(next, "enemy");
-  }
-
   next = rollD20(next, "enemy");
+  if (next.phase !== "enemy" || next.activePlayerId !== "enemy") return next;
 
   let cardsPlayed = 0;
 
-  while (cardsPlayed < AI_MAX_PLAYS_PER_TURN) {
+  while (cardsPlayed < AI_MAX_PLAYS_PER_TURN && canPlayerMakeAnyMove(next, "enemy")) {
     const chosen = chooseAiCard(next);
     if (!chosen) {
       next = addLog(
@@ -101,18 +82,19 @@ export function runSimpleAI(state: MatchState): MatchState {
       break;
     }
 
-    const slotIndex = getPreferredFreeSlotIndex(next, "enemy");
-    if (slotIndex < 0) {
+    const requiresSlot = cardRequiresBoardSlot(chosen);
+    const slotIndex = requiresSlot ? getPreferredFreeSlotIndex(next, "enemy") : -1;
+    if (requiresSlot && slotIndex < 0) {
       next = addLog(next, "AI cannot play: no free board slots.");
       break;
     }
 
     const beforeWill = next.enemy.will;
-    next = playCard(next, "enemy", chosen.instanceId, {
+    next = playCard(next, "enemy", chosen.instanceId, requiresSlot ? {
       type: "slot",
       playerId: "enemy",
       slotIndex,
-    } as any);
+    } as any : undefined);
 
     if (!didCardLeaveHand(next, chosen.instanceId)) {
       next = addLog(next, `AI failed to play ${getCardTitle(chosen)}.`);
@@ -121,7 +103,7 @@ export function runSimpleAI(state: MatchState): MatchState {
 
     cardsPlayed += 1;
 
-    if (beforeWill === next.enemy.will && getCardCost(chosen) > 0) {
+    if (beforeWill === next.enemy.will && getCardCost(chosen) > 0 && !next.currentTurn?.freeCards) {
       next = addLog(next, `AI warning: ${getCardTitle(chosen)} did not spend Will correctly.`);
       break;
     }
