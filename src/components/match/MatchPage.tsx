@@ -1220,6 +1220,10 @@ export default function MatchPage() {
 
   const mergedLog = useMemo(() => [...state.log, ...uiLog].slice(-18), [state.log, uiLog]);
 
+  const onlineOpponent = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
+  const opponentDisplayName = isOnlineMode ? onlineOpponent?.playerName ?? "Opponent" : null;
+  const opponentRankLabel = isOnlineMode ? `RANK ${onlineOpponent?.level ?? "III"}` : null;
+
   if (isOnlineMode && onlineQueueState !== "matched") {
     return (
       <main className="matchPage onlineMatchmakingPage">

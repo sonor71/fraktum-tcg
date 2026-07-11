@@ -217,7 +217,7 @@ export function getPreferredFreeSlotIndex(state: MatchState, playerId: PlayerId)
   const matchingFrontSlot = enemySlots.findIndex((enemyCard, index) => enemyCard && !ownSlots[index]);
   if (matchingFrontSlot >= 0) return matchingFrontSlot;
 
-  const centerPriority = [2, 1, 3, 0, 4];
+  const centerPriority = [2, 3, 1, 4, 0, 5];
   const prioritySlot = centerPriority.find((index) => !ownSlots[index]);
   if (typeof prioritySlot === "number") return prioritySlot;
 
