@@ -7,7 +7,10 @@ type CatalogCard = {
   cost: number;
   health: number;
   rarity: string;
+  type: string;
+  attack: number;
   effectKey: string;
+  collection: string;
 };
 
 describe("match card data source", () => {
@@ -22,10 +25,13 @@ describe("match card data source", () => {
     catalog.forEach((card) => {
       const definition = byId.get(card.id);
       expect(definition, `missing match definition for ${card.id}`).toBeDefined();
+      expect(definition?.type).toBe(card.type);
       expect(definition?.cost).toBe(card.cost);
+      expect(definition?.attack).toBe(card.attack);
       expect(definition?.health).toBe(card.health);
       expect(definition?.rarity).toBe(card.rarity);
       expect(definition?.effectKey).toBe(card.effectKey);
+      expect(definition?.collection).toBe(card.collection);
     });
   });
 });

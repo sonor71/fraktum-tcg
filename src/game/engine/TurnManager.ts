@@ -125,10 +125,18 @@ export function cardRequiresBoardSlot(card: CardInstance) {
   return true;
 }
 
+export function getEffectiveCardCost(state: MatchState, playerId: PlayerId, card: CardInstance) {
+  const printedCost = getCardCost(card);
+  const turn = state.currentTurn;
+  const freeByTurn = turn?.playerId === playerId && turn.freeCards;
+  const freeByWorldWithoutWill = state.activeRouletteEvent === "WORLD_WITHOUT_WILL";
+  return freeByTurn || freeByWorldWithoutWill ? 0 : printedCost;
+}
+
 export function canPlayCardWithCurrentResources(state: MatchState, playerId: PlayerId, card: CardInstance) {
   const side = state[playerId];
   if (!canPlayerPlayCards(state, playerId)) return false;
-  if (getCardCost(card) > side.will && !state.currentTurn?.freeCards) return false;
+  if (getEffectiveCardCost(state, playerId, card) > side.will) return false;
   if (state.currentTurn?.playerId === playerId && state.currentTurn.d20Limit !== "unlimited" && state.currentTurn.playsUsed >= state.currentTurn.d20Limit) return false;
   if (cardRequiresBoardSlot(card) && !hasFreeSlot(state, playerId)) return false;
   return true;

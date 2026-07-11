@@ -1,11 +1,11 @@
 import type { PlayerId } from "../core/types";
 
-export const BOARD_SIZE = 5;
+export const BOARD_SIZE = 6;
 export const STARTING_HAND_SIZE = 7;
 export const HAND_LIMIT = 7;
 export const MATCH_POINTS_TO_WIN = 2;
-export const FATIGUE_DAMAGE = 3;
-export const SKIP_TURN_DAMAGE = FATIGUE_DAMAGE;
+export const NO_CARD_PENALTY_DAMAGE = 3;
+export const SKIP_TURN_DAMAGE = NO_CARD_PENALTY_DAMAGE;
 export const BASE_TURN_SECONDS = 60;
 export const MIN_TURN_SECONDS = 20;
 export const MAX_TURN_SECONDS = 90;
@@ -14,7 +14,9 @@ export const DEFAULT_WILL_REGEN = 2;
 export const FIRST_PLAYER_WILL_PENALTY = 2;
 export const ELEMENT_BONUS_CAP = 0.5;
 
-export type FateRouletteEvent = "MERGED_DECKS" | "WORLD_WITHOUT_WILL" | "BLIND_TOP" | "HIDDEN_HAND" | "EMPTY_OUTCOME" | "FULL_MATCH_RESET";
+export const DECK_SIZE = 20;
+
+export type FateRouletteEvent = "MERGED_DECKS" | "WORLD_WITHOUT_WILL" | "BLIND_TOP" | "HIDDEN_HAND" | "EMPTY_OUTCOME";
 
 export const FATE_ROULETTE_EVENTS: FateRouletteEvent[] = [
   "MERGED_DECKS",
@@ -22,7 +24,6 @@ export const FATE_ROULETTE_EVENTS: FateRouletteEvent[] = [
   "BLIND_TOP",
   "HIDDEN_HAND",
   "EMPTY_OUTCOME",
-  "FULL_MATCH_RESET",
 ];
 
 export function getD20PlayLimit(roll: number): number | "unlimited" {

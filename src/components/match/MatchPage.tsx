@@ -3,7 +3,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { GameAction } from "../../game/core/GameAction";
 import type { CardDefinition, CardInstance, StartMatchPayload } from "../../game/core/types";
 import { createInitialMatchState, dispatch } from "../../game/engine/MatchEngine";
-import { canPlayerMakeAnyMove, cardRequiresBoardSlot } from "../../game/engine/TurnManager";
+import { planNextAiAction } from "../../game/ai/SimpleAI";
+import { canPlayerMakeAnyMove, cardRequiresBoardSlot, getEffectiveCardCost } from "../../game/engine/TurnManager";
 import { MatchBoard } from "./MatchBoard";
 import { MatchDebugConsole } from "./debug/MatchDebugConsole";
 import { useMatchDebugRecorder } from "./debug/useMatchDebugRecorder";
@@ -64,22 +65,6 @@ function getOutcomeFromWinner(winner: MatchStateSnapshot["winner"]): MatchOutcom
 
 function pushLimited(entries: string[], message: string, limit = UI_LOG_LIMIT) {
   return [...entries, message].slice(-limit);
-}
-
-function getDefinitionNumber(card: CardInstance, keys: string[], fallback = 0) {
-  const definition = card.definition as unknown as Record<string, unknown>;
-
-  for (const key of keys) {
-    const value = definition[key];
-    const parsed = typeof value === "number" ? value : Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-
-  return fallback;
-}
-
-function getCardCost(card: CardInstance) {
-  return Math.max(0, Math.floor(getDefinitionNumber(card, ["cost", "willCost"], 0)));
 }
 
 function getCardTitle(card: CardInstance) {
@@ -197,7 +182,7 @@ function validatePlay(matchState: MatchStateSnapshot, cardInstanceId: string, sl
     }
   }
 
-  const cost = getCardCost(card);
+  const cost = getEffectiveCardCost(matchState, "player", card);
   if (matchState.player.will < cost) {
     return `${getCardTitle(card)} needs ${cost} Will. You have ${matchState.player.will}.`;
   }
@@ -383,17 +368,19 @@ function ownedCardToMatchDefinition(card: OwnedCard): CardDefinition {
 
 function buildPlayerDeckForMatch(ownedCards: OwnedCard[], deckIds: string[]) {
   const ownedByInstanceId = new Map(ownedCards.map((card) => [card.instanceId, card]));
-  const usedIds = new Set<string>();
+  const usedBaseIds = new Set<string>();
 
-  return deckIds
+  const deck = deckIds
     .map((deckId) => ownedByInstanceId.get(deckId))
     .filter((card): card is OwnedCard => Boolean(card))
     .filter((card) => {
-      if (usedIds.has(card.instanceId)) return false;
-      usedIds.add(card.instanceId);
+      if (usedBaseIds.has(card.baseId)) return false;
+      usedBaseIds.add(card.baseId);
       return true;
     })
     .map(ownedCardToMatchDefinition);
+
+  return deck.length === 20 ? deck : [];
 }
 
 function buildMatchPayloadFromDeck(
@@ -403,9 +390,9 @@ function buildMatchPayloadFromDeck(
   seed = Date.now(),
 ): StartMatchPayload {
   const playerDeck = buildPlayerDeckForMatch(ownedCards, deckIds);
-  const payload = playerDeck.length > 0
+  const payload = playerDeck.length === 20
     ? { seed, playerDeck, playerWillStats: willStats }
-    : { seed, playerWillStats: willStats };
+    : { seed, playerWillStats: willStats, deckError: "A FRAKTUM match requires a 20-card unique deck." };
 
   return payload as unknown as StartMatchPayload;
 }
@@ -441,8 +428,8 @@ function buildMatchPayloadFromOnlineRoom(
 
   return {
     seed: Number(room.seed || Date.now()),
-    playerDeck: own?.deck && own.deck.length > 0 ? own.deck : undefined,
-    enemyDeck: opponent?.deck && opponent.deck.length > 0 ? opponent.deck : undefined,
+    playerDeck: own?.deck && own.deck.length === 20 ? own.deck : undefined,
+    enemyDeck: opponent?.deck && opponent.deck.length === 20 ? opponent.deck : undefined,
     playerWillStats: own?.willStats ?? fallbackWillStats,
     enemyWillStats: opponent?.willStats ?? fallbackWillStats,
   } as unknown as StartMatchPayload;
@@ -1112,9 +1099,11 @@ export default function MatchPage() {
       aiTurnTimer.current = null;
       setAiThinking(false);
       const currentState = stateRef.current;
-      recordDebug({ source: "ai", category: "action", actionType: "AI_TURN_START", message: "Automatic AI turn started.", before: createMatchDebugStateSummary(currentState) });
-      send({ type: "AI_TURN" });
-    }, AUTO_AI_DELAY_MS);
+      const action = planNextAiAction(currentState);
+      if (!action) return;
+      recordDebug({ source: "ai", category: "action", actionType: "AI_ACTION_PLANNED", message: `AI planned ${action.type}.`, action, before: createMatchDebugStateSummary(currentState) });
+      send(action);
+    }, state.currentTurn?.playerId === "enemy" ? AUTO_AI_DELAY_MS : Math.max(150, Math.floor(AUTO_AI_DELAY_MS / 2)));
 
     return () => {
       clearTimer(aiTurnTimer);

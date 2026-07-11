@@ -49,11 +49,11 @@ function withMain(state: MatchState, playerId: PlayerId): MatchState {
 }
 
 describe("release match stability", () => {
-  it("uses exactly five board slots for both sides", () => {
+  it("uses exactly six board slots for both sides", () => {
     const state = createInitialMatchState({ seed: 42 });
-    expect(BOARD_SIZE).toBe(5);
-    expect(state.board.playerSlots).toHaveLength(5);
-    expect(state.board.enemySlots).toHaveLength(5);
+    expect(BOARD_SIZE).toBe(6);
+    expect(state.board.playerSlots).toHaveLength(6);
+    expect(state.board.enemySlots).toHaveLength(6);
   });
 
   it("canPlayerMakeAnyMove respects Will, free slots, and no-slot effects", () => {
@@ -91,7 +91,8 @@ describe("release match stability", () => {
 
     const played = playCard(state, "enemy", card.instanceId, { type: "slot", playerId: "enemy", slotIndex: 0 });
     const ended = endTurn(played, "enemy");
-    expect(ended.board.enemySlots[0]?.instanceId).toBe(card.instanceId);
+    expect(ended.board.enemySlots[0]).toBeNull();
+    expect(ended.enemy.discard.some((discarded) => discarded.instanceId === card.instanceId)).toBe(true);
   });
 
   it("AI can play visible cards through its normal turn flow", () => {

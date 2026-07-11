@@ -1,3 +1,4 @@
+import type { GameAction } from "../core/GameAction";
 import type { CardInstance, MatchState } from "../core/types";
 import { endTurn, playCard, rollD20 } from "../engine/MatchEngine";
 import {
@@ -50,69 +51,46 @@ function chooseAiCard(state: MatchState): CardInstance | undefined {
   return bestByScore ?? getBestPlayableCard(state, "enemy");
 }
 
-function didCardLeaveHand(state: MatchState, cardId: string) {
-  return !state.enemy.hand.some((card) => card.instanceId === cardId);
+export function planNextAiAction(state: MatchState): GameAction | null {
+  if (state.activePlayerId !== "enemy" || state.winner || state.phase !== "enemy") return null;
+  if (!state.currentTurn || state.currentTurn.playerId !== "enemy") return { type: "ROLL_D20", playerId: "enemy" };
+
+  if (!canPlayerMakeAnyMove(state, "enemy")) return { type: "END_TURN", playerId: "enemy" };
+
+  const chosen = chooseAiCard(state);
+  if (!chosen) return { type: "END_TURN", playerId: "enemy" };
+
+  const requiresSlot = cardRequiresBoardSlot(chosen);
+  const slotIndex = requiresSlot ? getPreferredFreeSlotIndex(state, "enemy") : -1;
+  if (requiresSlot && slotIndex < 0) return { type: "END_TURN", playerId: "enemy" };
+
+  return {
+    type: "PLAY_CARD",
+    playerId: "enemy",
+    cardInstanceId: chosen.instanceId,
+    target: requiresSlot ? { type: "slot", playerId: "enemy", slotIndex } : undefined,
+  };
 }
 
 export function runSimpleAI(state: MatchState): MatchState {
-  if (state.activePlayerId !== "enemy") {
-    return addLog(state, "AI skipped: not AI turn.");
-  }
-
-  if (state.phase !== "enemy") {
-    return addLog(state, "AI skipped: enemy phase is not active.");
-  }
-
   let next = state;
+  let safety = AI_MAX_PLAYS_PER_TURN + 3;
 
-  next = rollD20(next, "enemy");
-  if (next.phase !== "enemy" || next.activePlayerId !== "enemy") return next;
-
-  let cardsPlayed = 0;
-
-  while (cardsPlayed < AI_MAX_PLAYS_PER_TURN && canPlayerMakeAnyMove(next, "enemy")) {
-    const chosen = chooseAiCard(next);
-    if (!chosen) {
-      next = addLog(
-        next,
-        cardsPlayed === 0
-          ? "AI has no playable cards after D20 roll."
-          : "AI has no more playable cards.",
-      );
-      break;
-    }
-
-    const requiresSlot = cardRequiresBoardSlot(chosen);
-    const slotIndex = requiresSlot ? getPreferredFreeSlotIndex(next, "enemy") : -1;
-    if (requiresSlot && slotIndex < 0) {
-      next = addLog(next, "AI cannot play: no free board slots.");
-      break;
-    }
-
-    const beforeWill = next.enemy.will;
-    next = playCard(next, "enemy", chosen.instanceId, requiresSlot ? {
-      type: "slot",
-      playerId: "enemy",
-      slotIndex,
-    } as any : undefined);
-
-    if (!didCardLeaveHand(next, chosen.instanceId)) {
-      next = addLog(next, `AI failed to play ${getCardTitle(chosen)}.`);
-      break;
-    }
-
-    cardsPlayed += 1;
-
-    if (beforeWill === next.enemy.will && getCardCost(chosen) > 0 && !next.currentTurn?.freeCards) {
-      next = addLog(next, `AI warning: ${getCardTitle(chosen)} did not spend Will correctly.`);
-      break;
-    }
-
-    if (next.phase === "ended") return next;
-  }
-
-  if (cardsPlayed > 0) {
-    next = addLog(next, `AI played ${cardsPlayed} card${cardsPlayed === 1 ? "" : "s"}.`);
+  while (safety > 0) {
+    safety -= 1;
+    const action = planNextAiAction(next);
+    if (!action) return next;
+    if (action.type === "ROLL_D20") next = rollD20(next, "enemy");
+    else if (action.type === "PLAY_CARD") {
+      const beforeWill = next.enemy.will;
+      const chosen = next.enemy.hand.find((card) => card.instanceId === action.cardInstanceId);
+      next = playCard(next, "enemy", action.cardInstanceId, action.target);
+      if (chosen && beforeWill === next.enemy.will && getCardCost(chosen) > 0 && !next.currentTurn?.freeCards) {
+        next = addLog(next, `AI warning: ${getCardTitle(chosen)} did not spend Will correctly.`);
+        return next;
+      }
+    } else if (action.type === "END_TURN") return endTurn(next, "enemy");
+    if (next.phase === "ended" || next.phase === "betweenBattles") return next;
   }
 
   return endTurn(next, "enemy");

@@ -11,7 +11,7 @@ assert(adapterSource.includes('CARDS.map(toEngineCardDefinition)'), 'engine card
 assert(engineSource.includes('temporaryUntilRoundEnd: !permanent'), 'no-HP cards must be marked temporary');
 assert(engineSource.includes('cleanupTemporaryCards'), 'round cleanup must exist');
 assert(engineSource.includes('Not enough Will'), 'insufficient Will log must exist');
-assert(engineSource.includes('Fatigue'), 'fatigue log must exist');
+assert(engineSource.includes('No-card penalty'), 'no-card penalty log must exist');
 assert(cardViewSource.includes('matchCardBadge is-cost'), 'card cost badge missing');
 assert(cardViewSource.includes('matchCardBadge is-hp'), 'card HP badge missing');
 assert(handViewSource.includes('onPointerDown') && handViewSource.includes('elementsFromPoint'), 'pointer drag/drop missing');

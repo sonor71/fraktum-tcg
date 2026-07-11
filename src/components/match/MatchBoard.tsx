@@ -1,4 +1,5 @@
 import type { CardInstance, MatchState } from "../../game/core/types";
+import { getEffectiveCardCost } from "../../game/engine/TurnManager";
 import { BattleLog } from "./BattleLog";
 import { BoardSlot } from "./BoardSlot";
 import { D20View } from "./D20View";
@@ -54,19 +55,6 @@ function readDefinitionText(card: CardInstance | undefined | null, keys: string[
   return fallback;
 }
 
-function readDefinitionNumber(card: CardInstance | undefined | null, keys: string[], fallback = 0) {
-  const definition = card?.definition as unknown as Record<string, unknown> | undefined;
-  if (!definition) return fallback;
-
-  for (const key of keys) {
-    const value = definition[key];
-    const parsed = typeof value === "number" ? value : Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-
-  return fallback;
-}
-
 function getHeroName(player: MatchSide, fallback: string) {
   return readDefinitionText(player.hero, ["title", "ruTitle", "name"], fallback);
 }
@@ -78,10 +66,6 @@ function getHeroImage(player: MatchSide) {
 function getCardTitle(card: CardInstance | undefined | null) {
   if (!card) return "Card";
   return readDefinitionText(card, ["title", "ruTitle", "name"], card.baseId || "Card");
-}
-
-function getCardCost(card: CardInstance | undefined | null) {
-  return Math.max(0, Math.floor(readDefinitionNumber(card, ["cost", "willCost"], 0)));
 }
 
 function getPhaseLabel(state: MatchState) {
@@ -127,7 +111,7 @@ function getActionHint(
 
   if (!selectedCard) return "Drag a card to an empty lower slot.";
 
-  const cost = getCardCost(selectedCard);
+  const cost = getEffectiveCardCost(state, "player", selectedCard);
   if (state.player.will < cost) {
     return `${getCardTitle(selectedCard)} needs ${cost} Will.`;
   }
@@ -176,7 +160,7 @@ export function MatchBoard({
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId);
   const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner;
   const canRoll = state.activePlayerId === "player" && state.phase === "roll" && !state.winner;
-  const selectedCardIsPlayable = Boolean(selectedCard && canPlay && state.player.will >= getCardCost(selectedCard));
+  const selectedCardIsPlayable = Boolean(selectedCard && canPlay && state.player.will >= getEffectiveCardCost(state, "player", selectedCard));
   const playerName = getHeroName(state.player, "Brian");
   const isOnlineMode = matchMode === "online";
   const enemyName = isOnlineMode && opponentName?.trim() ? opponentName.trim() : getHeroName(state.enemy, "Felix");

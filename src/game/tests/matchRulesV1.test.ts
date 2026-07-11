@@ -33,6 +33,14 @@ function withTurn(state: MatchState, playerId: PlayerId, limit: number | "unlimi
 }
 
 describe("FRAKTUM Match Rules v1.0", () => {
+
+  it("deck starts as 20 unique cards with 7 hand and 13 deck after draw", () => {
+    const state = createInitialMatchState({ seed: 11 });
+    expect(state.player.hand).toHaveLength(7);
+    expect(state.player.deck).toHaveLength(13);
+    expect(new Set([...state.player.hand, ...state.player.deck].map((card) => card.baseId)).size).toBe(20);
+    expect([...state.player.hand, ...state.player.deck].some((card) => card.definition.type === "character" || card.definition.type === "bonus")).toBe(false);
+  });
   it("1 rerolls tied initiative", () => {
     const state = createInitialMatchState({ seed: 5 });
     expect(state.initiativeRolls?.length).toBeGreaterThanOrEqual(1);
@@ -79,14 +87,13 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(next.activeRouletteEvent).toBeDefined();
     expect(next.lastRoll).not.toBe(15);
     const again = rollD20({ ...next, phase: "roll", rngSeed: 1198 }, "player");
-    expect(again.log.filter((l) => l.includes("Fate Roulette activated"))).toHaveLength(1);
+    expect(next.rouletteUsedThisBattle).toBe(true);
+    expect(again.log.filter((l) => l.includes("[ROULETTE_START]"))).toHaveLength(1);
   });
-  it("12 D20=20 does not make cards free; WORLD_WITHOUT_WILL does", () => {
+  it("12 D20=20 makes cards free for current turn", () => {
     const card = inst(def("free", { cost: 5 }), "player");
     let state = withTurn(createInitialMatchState(), "player");
-    state = { ...state, player: { ...state.player, will: 0, hand: [card] }, lastRoll: 20, currentTurn: { ...state.currentTurn!, freeCards: false } };
-    expect(playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 }).player.hand).toHaveLength(1);
-    state = { ...state, currentTurn: { ...state.currentTurn!, freeCards: true } };
+    state = { ...state, player: { ...state.player, will: 0, hand: [card] }, lastRoll: 20, currentTurn: { ...state.currentTurn!, freeCards: true } };
     const played = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
     expect(played.player.will).toBe(0);
     expect(played.currentTurn?.playedCosts[0].cost).toBe(5);
@@ -98,13 +105,13 @@ describe("FRAKTUM Match Rules v1.0", () => {
     state = { ...state, player: { ...state.player, will: 5, hand: [unit] } };
     const played = playCard(state, "player", unit.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
     expect(resolveFieldCombat(played, "player").enemy.hp).toBe(played.enemy.hp);
-    expect(resolveFieldCombat({ ...played, turn: played.turn + 1 }, "player").enemy.hp).toBeLessThan(played.enemy.hp);
+    expect(resolveFieldCombat({ ...played, player: { ...played.player, personalTurnsTaken: 1 } }, "player").enemy.hp).toBeLessThan(played.enemy.hp);
   });
   it("15-17 line combat is simultaneous, defensive cards do not counter, overflow hits hero", () => {
     const a = inst(def("a", { attack: 7, health: 4 }), "player");
     const d = inst(def("d", { attack: 0, health: 4 }), "enemy");
     let state = createInitialMatchState();
-    state = { ...state, turn: 2, board: { playerSlots: [a, null, null, null, null], enemySlots: [d, null, null, null, null] } };
+    state = { ...state, turn: 2, board: { playerSlots: [a, null, null, null, null, null], enemySlots: [d, null, null, null, null, null] } };
     const next = resolveFieldCombat(state, "player");
     expect(next.enemy.hp).toBe(state.enemy.hp - 3);
     expect(next.player.hp).toBe(state.player.hp);
@@ -118,7 +125,7 @@ describe("FRAKTUM Match Rules v1.0", () => {
   it("20-22 voluntary destroy costs Will/limit and frees slot", () => {
     const unit = inst(def("unit", { health: 3 }), "player");
     let state = withTurn(createInitialMatchState(), "player", 1);
-    state = { ...state, player: { ...state.player, will: 2 }, board: { ...state.board, playerSlots: [unit, null, null, null, null] } };
+    state = { ...state, player: { ...state.player, will: 2 }, board: { ...state.board, playerSlots: [unit, null, null, null, null, null] } };
     const next = destroyOwnCard(state, "player", 0);
     expect(next.player.will).toBe(1);
     expect(next.currentTurn?.playsUsed).toBe(1);
@@ -127,13 +134,13 @@ describe("FRAKTUM Match Rules v1.0", () => {
   });
   it("23-25 fatigue applies only with empty hand and deck", () => {
     let state = withTurn(createInitialMatchState(), "player");
-    expect(endTurn(state, "player").player.hp).toBe(state.player.hp);
+    expect(endTurn(state, "player").player.hp).toBe(state.player.hp - 3);
     state = { ...state, player: { ...state.player, hand: [], deck: [] } };
     expect(endTurn(state, "player").player.hp).toBe(state.player.hp - 3);
     const card = inst(def("p"), "player");
     state = { ...state, player: { ...state.player, will: 5, hand: [card], deck: [] } };
     const played = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
-    expect(endTurn(played, "player").player.hp).toBe(played.player.hp - 3);
+    expect(endTurn(played, "player").player.hp).toBe(played.player.hp);
   });
   it("26-28 periodic/sequence damage can end as draw and HP clamps to zero", () => {
     const p = damageHero({ ...createInitialMatchState().player, hp: 2 }, 5).player;

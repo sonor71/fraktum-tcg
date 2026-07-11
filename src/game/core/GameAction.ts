@@ -6,4 +6,5 @@ export type GameAction =
   | { type: "DESTROY_OWN_CARD"; playerId: PlayerId; slotIndex: number }
   | { type: "END_TURN"; playerId: PlayerId }
   | { type: "AI_TURN" }
+  | { type: "START_NEXT_BATTLE" }
   | { type: "CONCEDE"; playerId: PlayerId };
