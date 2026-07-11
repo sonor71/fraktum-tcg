@@ -467,16 +467,20 @@ function collectBattleDefinitions(state: MatchState, playerId: PlayerId): CardDe
 }
 
 function startNextBattle(state: MatchState, scores: Record<PlayerId, number>, reason: string): MatchState {
+  const previousBattle = state.battleNumber ?? 1;
+  const nextBattleNumber = previousBattle + 1;
   const nextBattle = createInitialMatchState({
     seed: state.rngSeed,
     playerDeck: collectBattleDefinitions(state, "player"),
     enemyDeck: collectBattleDefinitions(state, "enemy"),
-  });
+    playerWillStats: { maxWill: state.player.maxWill, regenPerRound: state.player.willRegenPerRound },
+    enemyWillStats: { maxWill: state.enemy.maxWill, regenPerRound: state.enemy.willRegenPerRound },
+  } as StartMatchPayload);
 
   return log({
     ...nextBattle,
     id: state.id,
-    battleNumber: (state.battleNumber ?? 1) + 1,
+    battleNumber: nextBattleNumber,
     seriesScore: scores,
     caduceusUsed: state.caduceusUsed,
     rouletteUsedThisBattle: false,
@@ -484,7 +488,7 @@ function startNextBattle(state: MatchState, scores: Record<PlayerId, number>, re
     rouletteOwnerId: undefined,
     rouletteExpiresBeforeOwnerPersonalTurn: undefined,
     battleResult: undefined,
-  }, `${reason} Battle result: ${state.battleResult ?? "complete"}. Series score ${scores.player}:${scores.enemy}. Next battle starts.`);
+  }, `${reason} Previous battle: ${previousBattle}. New battle: ${nextBattleNumber}. Preserved score: ${scores.player}:${scores.enemy}. Next battle starts.`);
 }
 
 function finishBattle(state: MatchState, result: PlayerId | "draw", reason: string): MatchState {
@@ -493,10 +497,10 @@ function finishBattle(state: MatchState, result: PlayerId | "draw", reason: stri
   const scoredState = { ...state, seriesScore: scores, battleResult: result };
 
   if (!matchWinner) {
-    return log({ ...scoredState, phase: "betweenBattles", battleEndReason: reason }, `${reason} Battle result: ${result}. Series score ${scores.player}:${scores.enemy}. Awaiting next battle.`);
+    return log({ ...scoredState, phase: "betweenBattles", battleEndReason: reason }, `BATTLE_ENDED Result: ${result}. Battle: ${state.battleNumber ?? 1}. Score: ${scores.player}:${scores.enemy}. Reason: ${reason} BETWEEN_BATTLES_SCREEN_OPENED`);
   }
 
-  return log({ ...scoredState, phase: "ended", winner: matchWinner, battleEndReason: reason }, `${reason} Battle result: ${result}. Series score ${scores.player}:${scores.enemy}. Match result: ${matchWinner}.`);
+  return log({ ...scoredState, phase: "ended", winner: matchWinner, battleEndReason: reason }, `BATTLE_ENDED Result: ${result}. Battle: ${state.battleNumber ?? 1}. Score: ${scores.player}:${scores.enemy}. Reason: ${reason} Match result: ${matchWinner}.`);
 }
 
 export function resolveCaduceusBattleDraw(state: MatchState, sourceName = "Caduceus"): MatchState {
@@ -512,7 +516,7 @@ export function dispatch(state: MatchState, action: GameAction): MatchState {
 
     switch (action.type) {
       case "START_MATCH":
-        return startMatch(action.payload);
+        return log(startMatch(action.payload), "NEW_MATCH_RESTARTED Score reset: 0:0");
       case "ROLL_D20":
         return rollD20(state, action.playerId);
       case "PLAY_CARD":
@@ -522,7 +526,9 @@ export function dispatch(state: MatchState, action: GameAction): MatchState {
       case "END_TURN":
         return endTurn(state, action.playerId);
       case "START_NEXT_BATTLE":
-        return state.phase === "betweenBattles" ? startNextBattle(state, state.seriesScore ?? { player: 0, enemy: 0 }, "BATTLE_STATE_RESET") : log(state, "Cannot start next battle now.");
+        if (state.phase !== "betweenBattles") return log(state, "Cannot start next battle now.");
+        if (action.battleNumber !== undefined && action.battleNumber !== state.battleNumber) return log(state, "Duplicate START_NEXT_BATTLE ignored.");
+        return startNextBattle(log(state, "START_NEXT_BATTLE_REQUESTED"), state.seriesScore ?? { player: 0, enemy: 0 }, "BATTLE_STATE_RESET");
       case "AI_TURN":
         return runSimpleAI(state);
       case "CONCEDE":

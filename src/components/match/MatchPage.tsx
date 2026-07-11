@@ -919,6 +919,24 @@ export default function MatchPage() {
     } as GameAction);
   }, [recordDebug, deckIds, ownedCards, willUpgrades]);
 
+  const handleStartNextBattle = useCallback(() => {
+    const currentState = stateRef.current;
+
+    if (currentState.phase !== "betweenBattles") {
+      return;
+    }
+
+    clearTimer(pendingPlayTimer);
+    clearTimer(aiTurnTimer);
+    clearTimer(autoPlayerTurnTimer);
+    setSelectedCardId(null);
+    setAiThinking(false);
+    void submitGameAction({
+      type: "START_NEXT_BATTLE",
+      battleNumber: currentState.battleNumber,
+    } as GameAction);
+  }, [submitGameAction]);
+
   const handleReturnToMenu = useCallback(() => {
     clearTimer(pendingPlayTimer);
     clearTimer(aiTurnTimer);
@@ -1226,9 +1244,6 @@ export default function MatchPage() {
 
   const mergedLog = useMemo(() => [...state.log, ...uiLog].slice(-18), [state.log, uiLog]);
 
-  const onlineOpponent = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
-  const opponentDisplayName = isOnlineMode ? onlineOpponent?.playerName ?? "Opponent" : null;
-  const opponentRankLabel = isOnlineMode ? `RANK ${onlineOpponent?.level ?? "III"}` : null;
 
   if (isOnlineMode && onlineQueueState !== "matched") {
     return (
@@ -1302,6 +1317,7 @@ export default function MatchPage() {
         onEndTurn={handleEndTurn}
         onAiTurn={handleAiTurn}
         onRestart={handleRestart}
+        onStartNextBattle={handleStartNextBattle}
         onConcede={handleConcede}
         onReturnToMenu={handleReturnToMenu}
         reward={matchReward}
