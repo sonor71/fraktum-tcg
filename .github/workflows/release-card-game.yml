@@ -1,0 +1,27 @@
+name: Release card game for launcher
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig*.json"
+      - "vite.config.*"
+      - ".github/workflows/release-card-game.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-card-game
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+   
