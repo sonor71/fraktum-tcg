@@ -88,7 +88,7 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(next.lastRoll).not.toBe(15);
     const again = rollD20({ ...next, phase: "roll", rngSeed: 1198 }, "player");
     expect(next.rouletteUsedThisBattle).toBe(true);
-    expect(again.log.filter((l) => l.includes("[ROULETTE_START]"))).toHaveLength(1);
+    expect(again.log.filter((l) => l.includes("[ROULETTE_STARTED]"))).toHaveLength(1);
   });
   it("12 D20=20 makes cards free for current turn", () => {
     const card = inst(def("free", { cost: 5 }), "player");
@@ -105,13 +105,22 @@ describe("FRAKTUM Match Rules v1.0", () => {
     state = { ...state, player: { ...state.player, will: 5, hand: [unit] } };
     const played = playCard(state, "player", unit.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
     expect(resolveFieldCombat(played, "player").enemy.hp).toBe(played.enemy.hp);
+    expect(resolveFieldCombat(played, "enemy").enemy.hp).toBe(played.enemy.hp);
     expect(resolveFieldCombat({ ...played, player: { ...played.player, personalTurnsTaken: 1 } }, "player").enemy.hp).toBeLessThan(played.enemy.hp);
+  });
+  it("13-14 applies the same owner-personal-turn attack delay to AI cards", () => {
+    const sandstorm = inst(def("sandstorm", { title: "Sandstorm", attack: 4, health: 3 }), "enemy");
+    let state = withTurn(createInitialMatchState(), "enemy");
+    state = { ...state, enemy: { ...state.enemy, will: 5, hand: [sandstorm] } };
+    const played = playCard(state, "enemy", sandstorm.instanceId, { type: "slot", playerId: "enemy", slotIndex: 0 });
+    expect(resolveFieldCombat(played, "player").player.hp).toBe(played.player.hp);
+    expect(resolveFieldCombat({ ...played, enemy: { ...played.enemy, personalTurnsTaken: 1 } }, "enemy").player.hp).toBeLessThan(played.player.hp);
   });
   it("15-17 line combat is simultaneous, defensive cards do not counter, overflow hits hero", () => {
     const a = inst(def("a", { attack: 7, health: 4 }), "player");
     const d = inst(def("d", { attack: 0, health: 4 }), "enemy");
     let state = createInitialMatchState();
-    state = { ...state, turn: 2, board: { playerSlots: [a, null, null, null, null, null], enemySlots: [d, null, null, null, null, null] } };
+    state = { ...state, turn: 2, board: { playerSlots: [a, null, null, null, null], enemySlots: [d, null, null, null, null] } };
     const next = resolveFieldCombat(state, "player");
     expect(next.enemy.hp).toBe(state.enemy.hp - 3);
     expect(next.player.hp).toBe(state.player.hp);
@@ -125,7 +134,7 @@ describe("FRAKTUM Match Rules v1.0", () => {
   it("20-22 voluntary destroy costs Will/limit and frees slot", () => {
     const unit = inst(def("unit", { health: 3 }), "player");
     let state = withTurn(createInitialMatchState(), "player", 1);
-    state = { ...state, player: { ...state.player, will: 2 }, board: { ...state.board, playerSlots: [unit, null, null, null, null, null] } };
+    state = { ...state, player: { ...state.player, will: 2 }, board: { ...state.board, playerSlots: [unit, null, null, null, null] } };
     const next = destroyOwnCard(state, "player", 0);
     expect(next.player.will).toBe(1);
     expect(next.currentTurn?.playsUsed).toBe(1);
@@ -178,5 +187,13 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(clampTimerSeconds(10)).toBe(20);
     expect(clampTimerSeconds(120)).toBe(90);
     expect(clampTimerSeconds(45)).toBe(45);
+  });
+  it("blocks hand card play while BLIND_TOP is active", () => {
+    const card = inst(def("blind_hand", { cost: 1 }), "player");
+    let state = withTurn(createInitialMatchState(), "player");
+    state = { ...state, activeRouletteEvent: "BLIND_TOP", player: { ...state.player, will: 5, hand: [card] } };
+    const next = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
+    expect(next.player.hand).toContain(card);
+    expect(next.log.at(-1)).toContain("[BLIND_TOP]");
   });
 });

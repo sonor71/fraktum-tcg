@@ -553,20 +553,23 @@ function beginTurnIfNeeded(state: MatchState, playerId: PlayerId): MatchState {
 
 function rollD20ForLimit(state: MatchState): { state: MatchState; roll: number; rouletteActivated: boolean } {
   let roll = rollDie(state.rngSeed, 20);
-  let next: MatchState = { ...state, rngSeed: roll.seed };
+  let next: MatchState = log({ ...state, rngSeed: roll.seed }, `[D20_INITIAL_ROLL] ${roll.value}.`);
   let rouletteActivated = false;
 
   if (isFateRouletteRoll(roll.value) && !next.rouletteUsedThisBattle) {
     const eventRoll = rollDie(next.rngSeed, FATE_ROULETTE_EVENTS.length);
     const event = FATE_ROULETTE_EVENTS[eventRoll.value - 1];
-    next = log({ ...next, rngSeed: eventRoll.seed, rouletteUsedThisBattle: true, activeRouletteEvent: event }, `[ROULETTE_START] Event: ${event}.`);
+    next = log({ ...next, rngSeed: eventRoll.seed, rouletteUsedThisBattle: true, activeRouletteEvent: event }, `[ROULETTE_STARTED] ${event}.`);
     rouletteActivated = true;
   }
 
   while (isFateRouletteRoll(roll.value)) {
     roll = rollDie(next.rngSeed, 20);
-    next = { ...next, rngSeed: roll.seed };
+    next = log({ ...next, rngSeed: roll.seed }, `[D20_LIMIT_REROLL] ${roll.value}.`);
   }
+
+  const limit = getD20PlayLimit(roll.value);
+  next = log(next, `[D20_LIMIT_SET] ${limit === "unlimited" ? "unlimited" : limit}.`);
 
   return { state: next, roll: roll.value, rouletteActivated };
 }
@@ -641,6 +644,11 @@ export function playCard(
   if (playBlock.blocked) return playBlock.state;
 
   const side = playBlock.state[playerId];
+  const handCardRequested = side.hand.some((candidate) => candidate.instanceId === cardInstanceId);
+  if (playBlock.state.activeRouletteEvent === "BLIND_TOP" && handCardRequested) {
+    return log(playBlock.state, "[BLIND_TOP] Cards from hand cannot be played while Blind Top is active.");
+  }
+
   const card = side.hand.find((candidate) => candidate.instanceId === cardInstanceId);
 
   if (!card) return log(state, "Card is not in hand.");

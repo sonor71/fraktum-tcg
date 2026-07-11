@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CardDefinition, CardInstance, MatchState, PlayerId } from "../core/types";
-import { runSimpleAI } from "../ai/SimpleAI";
-import { createInitialMatchState, endTurn, playCard } from "../engine/MatchEngine";
+import { planNextAiAction, runSimpleAI } from "../ai/SimpleAI";
+import { createInitialMatchState, dispatch, endTurn, playCard } from "../engine/MatchEngine";
 import { BOARD_SIZE } from "../engine/Rules";
 import { canPlayerMakeAnyMove } from "../engine/TurnManager";
 
@@ -49,11 +49,11 @@ function withMain(state: MatchState, playerId: PlayerId): MatchState {
 }
 
 describe("release match stability", () => {
-  it("uses exactly six board slots for both sides", () => {
+  it("uses exactly five board slots for both sides", () => {
     const state = createInitialMatchState({ seed: 42 });
-    expect(BOARD_SIZE).toBe(6);
-    expect(state.board.playerSlots).toHaveLength(6);
-    expect(state.board.enemySlots).toHaveLength(6);
+    expect(BOARD_SIZE).toBe(5);
+    expect(state.board.playerSlots).toHaveLength(5);
+    expect(state.board.enemySlots).toHaveLength(5);
   });
 
   it("canPlayerMakeAnyMove respects Will, free slots, and no-slot effects", () => {
@@ -101,5 +101,31 @@ describe("release match stability", () => {
     state = { ...state, activePlayerId: "enemy", phase: "enemy", enemy: { ...state.enemy, will: 5, hand: [card], deck: [] } };
     const next = runSimpleAI(state);
     expect(next.enemy.discard.some((discarded) => discarded.instanceId === card.instanceId) || next.board.enemySlots.some((slot) => slot?.instanceId === card.instanceId)).toBe(true);
+  });
+
+  it("AI planner completes a full turn after ROLL_D20 without deadlocking", () => {
+    const card = inst(def("ai_unit", { cost: 1, health: 2, attack: 1, requiresBoardSlot: true }), "enemy");
+    let state = createInitialMatchState({ seed: 9 });
+    state = { ...state, activePlayerId: "enemy", phase: "enemy", enemy: { ...state.enemy, will: 5, hand: [card], deck: [] }, currentTurn: undefined };
+
+    let action = planNextAiAction(state);
+    expect(action?.type).toBe("ROLL_D20");
+    state = dispatch(state, action!);
+    expect(state.currentTurn?.playerId).toBe("enemy");
+
+    action = planNextAiAction(state);
+    expect(action?.type === "PLAY_CARD" || action?.type === "END_TURN").toBe(true);
+
+    let ended = false;
+    for (let step = 0; step < 12 && !ended; step += 1) {
+      action = planNextAiAction(state);
+      expect(action).not.toBeNull();
+      ended = action?.type === "END_TURN";
+      state = dispatch(state, action!);
+    }
+
+    expect(ended).toBe(true);
+    expect(state.activePlayerId).toBe("player");
+    expect(state.phase).toBe("roll");
   });
 });

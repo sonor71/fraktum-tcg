@@ -1100,7 +1100,18 @@ export default function MatchPage() {
       setAiThinking(false);
       const currentState = stateRef.current;
       const action = planNextAiAction(currentState);
-      if (!action) return;
+      if (!action) {
+        recordDebug({
+          source: "warning",
+          level: "warning",
+          category: "turn",
+          actionType: "AI_DEADLOCK_WARNING",
+          message: "AI planner returned no action during enemy turn; ending turn safely.",
+          before: createMatchDebugStateSummary(currentState),
+        });
+        send({ type: "END_TURN", playerId: "enemy" });
+        return;
+      }
       recordDebug({ source: "ai", category: "action", actionType: "AI_ACTION_PLANNED", message: `AI planned ${action.type}.`, action, before: createMatchDebugStateSummary(currentState) });
       send(action);
     }, state.currentTurn?.playerId === "enemy" ? AUTO_AI_DELAY_MS : Math.max(150, Math.floor(AUTO_AI_DELAY_MS / 2)));
@@ -1108,7 +1119,7 @@ export default function MatchPage() {
     return () => {
       clearTimer(aiTurnTimer);
     };
-  }, [recordDebug, isOnlineMode, state.activePlayerId, state.phase, state.turn, state.winner]);
+  }, [recordDebug, isOnlineMode, state]);
 
   useEffect(() => {
     clearTimer(autoPlayerTurnTimer);
