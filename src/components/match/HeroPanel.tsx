@@ -113,11 +113,11 @@ export function HeroPanel({ player, label, alignment = "left" }: HeroPanelProps)
         `is-${healthState}`,
       ].filter(Boolean).join(" ")}
       style={styleVars}
-      aria-label={`${label}: HP ${hp}/${hpMax}, shield ${shield}, will ${will}/${willMax}`}
+      aria-label={`${label}: HP ${hp}/${hpMax}, shield ${shield}, will ${player.id === "enemy" ? `hidden/${willMax}` : `${will}/${willMax}`}`}
       data-hp-state={healthState}
       data-hp={hp}
       data-shield={shield}
-      data-will={will}
+      data-will={player.id === "enemy" ? undefined : will}
     >
       <div className="matchHeroCorners" aria-hidden="true">
         <i />
@@ -189,7 +189,7 @@ export function HeroPanel({ player, label, alignment = "left" }: HeroPanelProps)
         </span>
         <span>
           <small>WILL</small>
-          <b>{will}/{willMax}</b>
+          <b>{player.id === "enemy" ? `?/${willMax}` : `${will}/${willMax}`}</b>
         </span>
       </div>
 
