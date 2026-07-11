@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CardDefinition, CardInstance, MatchState, PlayerId } from "../core/types";
 import { getBonusPercent, scaleByElementBonus } from "../engine/BonusSystem";
 import { damageHero, resolveFieldCombat } from "../engine/DamageSystem";
 import { drawCards } from "../engine/DrawSystem";
-import { createInitialMatchState, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
+import { createInitialMatchState, dispatch, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
 import { BOARD_SIZE, clampTimerSeconds, getD20PlayLimit } from "../engine/Rules";
+import { FATE_ROULETTE_RESULT_READ_MS } from "../engine/FateRoulette";
+import { planNextAiAction } from "../ai/SimpleAI";
 
 const def = (id: string, partial: Partial<CardDefinition> = {}): CardDefinition => ({
   id,
@@ -33,6 +35,9 @@ function withTurn(state: MatchState, playerId: PlayerId, limit: number | "unlimi
 }
 
 describe("FRAKTUM Match Rules v1.0", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("deck starts as 20 unique cards with 7 hand and 13 deck after draw", () => {
     const state = createInitialMatchState({ seed: 11 });
@@ -79,17 +84,83 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(getD20PlayLimit(6)).toBe(6);
     expect(getD20PlayLimit(7)).toBe("unlimited");
   });
-  it("9-11 roulette triggers per turn and rerolls 15-16 for a limit", () => {
+  it("9-11 roulette pauses the turn, then confirm rerolls 15-16 for a limit", () => {
     let state = createInitialMatchState({ seed: 31 });
     state = { ...state, rngSeed: 1198, activePlayerId: "player", phase: "roll" };
-    const next = rollD20(state, "player");
-    expect(next.currentTurn?.rouletteResolvedThisTurn).toBe(true);
-    expect(next.activeRouletteEvent).toBeDefined();
-    expect(next.lastRoll).not.toBe(15);
-    const again = rollD20({ ...next, phase: "roll", rngSeed: 1198 }, "player");
-    expect(next.rouletteUsedThisBattle).toBe(true);
-    expect(again.log.filter((l) => l.includes("[ROULETTE_STARTED]"))).toHaveLength(1);
+    const triggered = rollD20(state, "player");
+    expect(triggered.phase).toBe("roulette");
+    expect(triggered.rouletteState?.stage).toBe("awaitingSpin");
+    expect(triggered.rouletteState?.event).toBeUndefined();
+    expect(triggered.activeRouletteEvent).toBeUndefined();
+    expect(triggered.lastRoll).toBe(15);
+    expect(triggered.rouletteUsedThisBattle).toBe(true);
+
+    const spin = dispatch(triggered, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    const duplicateSpin = dispatch(spin, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(duplicateSpin.rouletteState?.event).toBe(spin.rouletteState?.event);
+
+    const revealAt = 1_000;
+    const reveal = dispatch(spin, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id, revealedAtMs: revealAt });
+    expect(reveal.rouletteState?.stage).toBe("result");
+    vi.useFakeTimers();
+    vi.setSystemTime(revealAt + FATE_ROULETTE_RESULT_READ_MS);
+    const confirmed = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(confirmed.rouletteState).toBeUndefined();
+    expect(confirmed.currentTurn?.rouletteResolvedThisTurn).toBe(true);
+    expect(confirmed.lastRoll).not.toBe(15);
+    expect(confirmed.phase).toBe("main");
   });
+
+  it("roulette result enforces the 15 second read window before confirm", () => {
+    vi.useFakeTimers();
+    const revealedAtMs = 10_000;
+    let state = createInitialMatchState({ seed: 31 });
+    state = { ...state, rngSeed: 1198, activePlayerId: "player", phase: "roll" };
+    const triggered = rollD20(state, "player");
+    const spin = dispatch(triggered, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    const reveal = dispatch(spin, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id, revealedAtMs });
+
+    expect(reveal.rouletteState?.stage).toBe("result");
+    expect(reveal.rouletteState?.resultRevealedAt).toBe(revealedAtMs);
+    expect(reveal.rouletteState?.confirmAvailableAt).toBe(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS);
+
+    vi.setSystemTime(revealedAtMs + 1_000);
+    const blockedAfterOneSecond = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(blockedAfterOneSecond.rouletteState).toBeDefined();
+    expect(blockedAfterOneSecond.lastRoll).toBe(15);
+    expect(blockedAfterOneSecond.structuredEngineEvents?.at(-1)?.type).toBe("ROULETTE_RESULT_CONFIRM_BLOCKED");
+
+    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS - 1);
+    const blockedAt14999 = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(blockedAt14999.rouletteState).toBeDefined();
+    expect(blockedAt14999.phase).toBe("roulette");
+
+    const repeatedReveal = dispatch(reveal, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id, revealedAtMs: revealedAtMs + 99_999 });
+    expect(repeatedReveal.rouletteState?.confirmAvailableAt).toBe(reveal.rouletteState?.confirmAvailableAt);
+
+    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS);
+    const confirmed = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(confirmed.rouletteState).toBeUndefined();
+    expect(confirmed.phase).toBe("main");
+    expect(confirmed.structuredEngineEvents?.some((event) => event.type === "ROULETTE_RESULT_CONFIRMED" && Number(event.payload?.visibleDurationMs) >= FATE_ROULETTE_RESULT_READ_MS)).toBe(true);
+  });
+
+  it("AI waits for roulette result read window before confirming", () => {
+    vi.useFakeTimers();
+    const revealedAtMs = 50_000;
+    let state = createInitialMatchState({ seed: 31, startingPlayerId: "enemy" });
+    state = { ...state, rngSeed: 1198, activePlayerId: "enemy", phase: "enemy" };
+    const triggered = rollD20(state, "enemy");
+    const spin = dispatch(triggered, { type: "SPIN_FATE_ROULETTE", playerId: "enemy", rouletteId: triggered.rouletteState!.id });
+    const reveal = dispatch(spin, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: triggered.rouletteState!.id, revealedAtMs });
+
+    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS - 1);
+    expect(planNextAiAction(reveal)).toBeNull();
+
+    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS);
+    expect(planNextAiAction(reveal)).toEqual({ type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: triggered.rouletteState!.id });
+  });
+
   it("12 D20=20 makes cards free for current turn", () => {
     const card = inst(def("free", { cost: 5 }), "player");
     let state = withTurn(createInitialMatchState(), "player");
