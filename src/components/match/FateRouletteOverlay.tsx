@@ -1,14 +1,14 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FateRouletteEvent, FateRouletteState, PlayerId } from "../../game/core/types";
 import { FATE_ROULETTE_EVENTS } from "../../game/engine/Rules";
-import { FATE_ROULETTE_META } from "../../game/engine/FateRoulette";
+import { FATE_ROULETTE_META, FATE_ROULETTE_RESULT_READ_MS } from "../../game/engine/FateRoulette";
 import "./fate-roulette.css";
 
 type Props = {
   roulette: FateRouletteState;
   localPlayerId?: PlayerId;
   onSpin: (rouletteId: string) => void;
-  onReveal: (rouletteId: string) => void;
+  onReveal: (rouletteId: string, revealedAtMs: number) => void;
   onConfirm: (rouletteId: string) => void;
 };
 
@@ -34,6 +34,7 @@ function getFateRouletteFinalAngle(resultIndex = 0, extraRotations = 6, spinNonc
 }
 
 export function FateRouletteOverlay({ roulette, localPlayerId = "player", onSpin, onReveal, onConfirm }: Props) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const isOwner = roulette.ownerId === localPlayerId;
   const event = roulette.event;
   const meta = event ? FATE_ROULETTE_META[event] : null;
@@ -41,11 +42,23 @@ export function FateRouletteOverlay({ roulette, localPlayerId = "player", onSpin
 
   useEffect(() => {
     if (roulette.stage !== "spinning") return undefined;
-    const timeout = window.setTimeout(() => onReveal(roulette.id), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 450 : 3800);
+    const timeout = window.setTimeout(() => onReveal(roulette.id, Date.now()), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 450 : 3800);
     return () => window.clearTimeout(timeout);
   }, [onReveal, roulette.id, roulette.stage]);
 
-  const wheelStyle = useMemo(() => ({ "--fate-final-angle": `${finalAngle}deg` }) as React.CSSProperties, [finalAngle]);
+  useEffect(() => {
+    if (roulette.stage !== "result") return undefined;
+    const interval = window.setInterval(() => setNowMs(Date.now()), 225);
+    return () => window.clearInterval(interval);
+  }, [roulette.id, roulette.stage]);
+
+  const remainingMs = Math.max(0, (roulette.confirmAvailableAt ?? 0) - nowMs);
+  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  const canConfirm = remainingMs <= 0;
+  const readProgress = roulette.resultRevealedAt && roulette.confirmAvailableAt
+    ? Math.max(0, Math.min(1, (nowMs - roulette.resultRevealedAt) / FATE_ROULETTE_RESULT_READ_MS))
+    : 0;
+  const wheelStyle = useMemo(() => ({ "--fate-final-angle": `${finalAngle}deg`, "--fate-read-progress": `${readProgress * 100}%` }) as React.CSSProperties, [finalAngle, readProgress]);
 
   return (
     <section className="fateRouletteOverlay" role="dialog" aria-modal="true" aria-labelledby="fateRouletteTitle" data-stage={roulette.stage}>
@@ -92,7 +105,12 @@ export function FateRouletteOverlay({ roulette, localPlayerId = "player", onSpin
               <h3>{meta.title}</h3>
               <p>{meta.description}</p>
               <div className="fateRouletteMetaGrid"><span>Длительность: <b>{meta.duration}</b></span><span>Затрагивает: <b>{meta.affects}</b></span></div>
-              {isOwner ? <button type="button" className="fateRouletteButton" onClick={() => onConfirm(roulette.id)}>ПРОДОЛЖИТЬ</button> : <p className="fateRouletteWaiting">Соперник подтверждает результат…</p>}
+              <div className="fateRouletteReadTimer" aria-live="polite">
+                <span>Прочитайте эффект события</span>
+                <b>{canConfirm ? "Продолжить можно сейчас" : `Продолжить можно через: ${remainingSeconds} сек.`}</b>
+                <i aria-hidden="true"><span style={{ width: `var(--fate-read-progress)` }} /></i>
+              </div>
+              {isOwner ? <button type="button" className="fateRouletteButton" disabled={!canConfirm} onClick={() => { if (canConfirm) onConfirm(roulette.id); }}>{canConfirm ? "ПРОДОЛЖИТЬ" : `ПРОДОЛЖИТЬ · ${remainingSeconds}`}</button> : <p className="fateRouletteWaiting">{canConfirm ? "Соперник подтверждает результат…" : `Ожидание чтения результата: ${remainingSeconds} сек.`}</p>}
             </>
           ) : roulette.stage === "awaitingSpin" ? (
             isOwner ? <button type="button" className="fateRouletteButton" onClick={() => onSpin(roulette.id)}>КРУТИТЬ РУЛЕТКУ</button> : <p className="fateRouletteWaiting">Соперник готовится к вращению…</p>

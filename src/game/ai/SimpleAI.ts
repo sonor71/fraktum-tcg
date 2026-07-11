@@ -1,7 +1,7 @@
 import type { GameAction } from "../core/GameAction";
 import type { CardInstance, MatchState } from "../core/types";
 import { confirmFateRouletteResult, endTurn, playBlindTopCard, playCard, rollD20 } from "../engine/MatchEngine";
-import { spinFateRoulette } from "../engine/FateRoulette";
+import { getFateRouletteConfirmRemainingMs, spinFateRoulette } from "../engine/FateRoulette";
 import {
   canPlayerMakeAnyMove,
   cardRequiresBoardSlot,
@@ -58,7 +58,10 @@ export function planNextAiAction(state: MatchState): GameAction | null {
     const roulette = state.rouletteState;
     if (!roulette || roulette.ownerId !== "enemy") return null;
     if (roulette.stage === "awaitingSpin") return { type: "SPIN_FATE_ROULETTE", playerId: "enemy", rouletteId: roulette.id };
-    if (roulette.stage === "result") return { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: roulette.id };
+    if (roulette.stage === "result") {
+      if (getFateRouletteConfirmRemainingMs(state, Date.now()) > 0) return null;
+      return { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: roulette.id };
+    }
     return null;
   }
   if (state.activePlayerId !== "enemy" || state.phase !== "enemy") return null;

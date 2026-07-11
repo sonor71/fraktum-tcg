@@ -33,7 +33,7 @@ import {
 } from "./TurnManager";
 
 import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, NO_CARD_PENALTY_DAMAGE, BASE_TURN_SECONDS, DECK_SIZE, getD20PlayLimit, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
-import { addRouletteEvent, applyFateRouletteEvent, createFateRouletteState, revealFateRouletteResult, spinFateRoulette } from "./FateRoulette";
+import { FATE_ROULETTE_RESULT_READ_MS, addRouletteEvent, applyFateRouletteEvent, createFateRouletteState, getFateRouletteConfirmRemainingMs, revealFateRouletteResult, spinFateRoulette } from "./FateRoulette";
 const LOG_LIMIT = 80;
 const ENGINE_EVENT_LIMIT = 200;
 
@@ -561,7 +561,7 @@ export function dispatch(state: MatchState, action: GameAction): MatchState {
       case "SPIN_FATE_ROULETTE":
         return spinFateRoulette(state, action.playerId, action.rouletteId);
       case "REVEAL_FATE_ROULETTE_RESULT":
-        return revealFateRouletteResult(state, action.playerId, action.rouletteId);
+        return revealFateRouletteResult(state, action.playerId, action.rouletteId, action.revealedAtMs);
       case "CONFIRM_FATE_ROULETTE_RESULT":
         return confirmFateRouletteResult(state, action.playerId, action.rouletteId);
       case "DESTROY_OWN_CARD":
@@ -693,7 +693,16 @@ export function confirmFateRouletteResult(state: MatchState, playerId: PlayerId,
   if (roulette.ownerId !== playerId) return log(state, "Only the roulette owner can confirm this result.");
   if (roulette.stage !== "result" || !roulette.event) return state;
 
-  let next = applyFateRouletteEvent(state, roulette.ownerId, roulette.event);
+  const nowMs = Date.now();
+  const remainingMs = getFateRouletteConfirmRemainingMs(state, nowMs);
+  if (remainingMs > 0) {
+    return addRouletteEvent(log(state, `[ROULETTE_RESULT_CONFIRM_BLOCKED] ${remainingMs}ms remaining before ${roulette.event} can be confirmed.`), "ROULETTE_RESULT_CONFIRM_BLOCKED", "Fate Roulette confirm blocked until the result has been readable for 15 seconds.", { rouletteId, ownerId: roulette.ownerId, remainingMs, confirmAvailableAt: roulette.confirmAvailableAt });
+  }
+
+  let next = state;
+  next = addRouletteEvent(next, "ROULETTE_RESULT_CONFIRM_UNLOCKED", "Fate Roulette result confirmation unlocked.", { rouletteId, event: roulette.event });
+  next = addRouletteEvent(next, "ROULETTE_RESULT_CONFIRMED", "Fate Roulette result confirmed.", { rouletteId, event: roulette.event, visibleDurationMs: Math.max(0, nowMs - (roulette.resultRevealedAt ?? nowMs)), readDurationMs: FATE_ROULETTE_RESULT_READ_MS });
+  next = applyFateRouletteEvent(next, roulette.ownerId, roulette.event);
   const reroll = rollD20ForLimit({ ...next, rouletteState: undefined }, { allowRoulette: false });
   const d20Limit = getD20PlayLimit(reroll.roll);
   next = {

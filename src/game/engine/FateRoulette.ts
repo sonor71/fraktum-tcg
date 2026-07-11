@@ -9,6 +9,7 @@ const ENGINE_EVENT_LIMIT = 200;
 export type { FateRouletteEvent };
 
 export const FATE_ROULETTE_SECTOR_COUNT = 5;
+export const FATE_ROULETTE_RESULT_READ_MS = 15_000;
 
 export const FATE_ROULETTE_META: Record<FateRouletteEvent, { title: string; shortTitle: string; description: string; duration: string; affects: string; icon: string }> = {
   MERGED_DECKS: {
@@ -99,14 +100,35 @@ export function spinFateRoulette(state: MatchState, playerId: PlayerId, roulette
   return addRouletteEvent(next, "ROULETTE_SPIN_STARTED", `Fate Roulette spin started: ${event}.`, { rouletteId, ownerId: playerId, event, resultIndex, spinNonce: nonceRoll.value, extraRotations });
 }
 
-export function revealFateRouletteResult(state: MatchState, playerId: PlayerId, rouletteId: string): MatchState {
+function isValidTimestamp(value: number) {
+  return Number.isFinite(value) && value >= 0;
+}
+
+export function revealFateRouletteResult(state: MatchState, playerId: PlayerId, rouletteId: string, revealedAtMs: number): MatchState {
   const roulette = state.rouletteState;
-  if (!roulette || roulette.id !== rouletteId || roulette.stage === "result") return state;
-  if (roulette.id !== rouletteId) return state;
+  if (!roulette || roulette.id !== rouletteId) return state;
+  if (roulette.stage === "result") return state;
   if (playerId !== roulette.ownerId && playerId !== "player") return state;
-  if (!roulette.event) return state;
-  const next: MatchState = { ...state, rouletteState: { ...roulette, stage: "result" } };
-  return addRouletteEvent(log(next, `[ROULETTE_RESULT_REVEALED] ${roulette.event}.`), "ROULETTE_RESULT_REVEALED", `Fate Roulette result revealed: ${roulette.event}.`, { rouletteId, event: roulette.event, resultIndex: roulette.resultIndex });
+  if (!roulette.event || !isValidTimestamp(revealedAtMs)) return state;
+
+  const confirmAvailableAt = revealedAtMs + FATE_ROULETTE_RESULT_READ_MS;
+  let next: MatchState = {
+    ...state,
+    rouletteState: {
+      ...roulette,
+      stage: "result",
+      resultRevealedAt: revealedAtMs,
+      confirmAvailableAt,
+    },
+  };
+  next = addRouletteEvent(log(next, `[ROULETTE_RESULT_REVEALED] ${roulette.event}.`), "ROULETTE_RESULT_REVEALED", `Fate Roulette result revealed: ${roulette.event}.`, { rouletteId, event: roulette.event, resultIndex: roulette.resultIndex, resultRevealedAt: revealedAtMs });
+  return addRouletteEvent(next, "ROULETTE_RESULT_READ_STARTED", "Fate Roulette result reading period started.", { rouletteId, event: roulette.event, resultRevealedAt: revealedAtMs, confirmAvailableAt, readDurationMs: FATE_ROULETTE_RESULT_READ_MS });
+}
+
+export function getFateRouletteConfirmRemainingMs(state: MatchState, nowMs: number) {
+  const roulette = state.rouletteState;
+  if (!roulette?.confirmAvailableAt) return 0;
+  return Math.max(0, roulette.confirmAvailableAt - nowMs);
 }
 
 function preserveOriginalOwner(card: CardInstance): CardInstance {

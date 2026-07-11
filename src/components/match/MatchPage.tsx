@@ -4,6 +4,7 @@ import type { GameAction } from "../../game/core/GameAction";
 import type { CardDefinition, CardInstance, StartMatchPayload } from "../../game/core/types";
 import { createInitialMatchState, dispatch } from "../../game/engine/MatchEngine";
 import { planNextAiAction } from "../../game/ai/SimpleAI";
+import { getFateRouletteConfirmRemainingMs } from "../../game/engine/FateRoulette";
 import { canPlayerMakeAnyMove, cardRequiresBoardSlot, getEffectiveCardCost } from "../../game/engine/TurnManager";
 import { MatchBoard } from "./MatchBoard";
 import { MatchDebugConsole } from "./debug/MatchDebugConsole";
@@ -50,6 +51,7 @@ type OnlineQueueState = "idle" | "searching" | "matched" | "error";
 const UI_LOG_LIMIT = 18;
 const PLAY_COMMIT_DELAY_MS = 90;
 const AUTO_AI_DELAY_MS = 720;
+const AUTO_AI_ROULETTE_CONFIRM_DELAY_MS = 480;
 const FX_EVENT_TTL_MS = 920;
 const TRAVEL_EVENT_TTL_MS = 760;
 const TACTICAL_REVEAL_TTL_MS = 3200;
@@ -893,9 +895,9 @@ export default function MatchPage() {
     void submitGameAction({ type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId } as GameAction);
   }, [submitGameAction]);
 
-  const handleRouletteReveal = useCallback((rouletteId: string) => {
+  const handleRouletteReveal = useCallback((rouletteId: string, revealedAtMs: number) => {
     const ownerId = stateRef.current.rouletteState?.ownerId ?? "player";
-    void submitGameAction({ type: "REVEAL_FATE_ROULETTE_RESULT", playerId: ownerId, rouletteId } as GameAction);
+    void submitGameAction({ type: "REVEAL_FATE_ROULETTE_RESULT", playerId: ownerId, rouletteId, revealedAtMs } as GameAction);
   }, [submitGameAction]);
 
   const handleRouletteConfirm = useCallback((rouletteId: string) => {
@@ -1118,6 +1120,24 @@ export default function MatchPage() {
     if (isOnlineMode) {
       setAiThinking(false);
       return;
+    }
+
+    if (state.phase === "roulette" && state.rouletteState?.ownerId === "enemy" && state.rouletteState.stage === "result") {
+      const remainingMs = getFateRouletteConfirmRemainingMs(state, Date.now());
+      setAiThinking(true);
+      aiTurnTimer.current = window.setTimeout(() => {
+        aiTurnTimer.current = null;
+        setAiThinking(false);
+        const currentState = stateRef.current;
+        if (currentState.phase !== "roulette" || currentState.rouletteState?.id !== state.rouletteState?.id || currentState.rouletteState?.stage !== "result") return;
+        const action = planNextAiAction(currentState);
+        if (!action) return;
+        recordDebug({ source: "ai", category: "action", actionType: "AI_ACTION_PLANNED", message: `AI planned ${action.type}.`, action, before: createMatchDebugStateSummary(currentState) });
+        send(action);
+      }, Math.max(0, remainingMs) + AUTO_AI_ROULETTE_CONFIRM_DELAY_MS);
+      return () => {
+        clearTimer(aiTurnTimer);
+      };
     }
 
     if (state.winner || (state.phase !== "enemy" && !(state.phase === "roulette" && state.rouletteState?.ownerId === "enemy"))) {
