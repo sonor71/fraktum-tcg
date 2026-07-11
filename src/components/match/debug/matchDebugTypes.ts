@@ -60,6 +60,7 @@ export type MatchDebugSideSummary = {
   deckCount: number;
   discardCount: number;
   slots: MatchDebugSlotSummary[];
+  zones?: Partial<Record<MatchDebugZone, MatchDebugCardSummary[]>>;
 };
 
 export type MatchDebugStateSummary = {

@@ -47,6 +47,8 @@ function summarizeCard(card: CardInstance): MatchDebugCardSummary {
 function summarizeSide(state: MatchState, playerId: PlayerId): MatchDebugSideSummary {
   const side = state[playerId];
   const slots = playerId === "player" ? state.board.playerSlots : state.board.enemySlots;
+  const boardCards = slots.filter((card): card is CardInstance => Boolean(card));
+
   return {
     id: playerId,
     hp: Math.max(0, Math.floor(Number(side.hp) || 0)),
@@ -57,6 +59,12 @@ function summarizeSide(state: MatchState, playerId: PlayerId): MatchDebugSideSum
     deckCount: side.deck.length,
     discardCount: side.discard.length,
     slots: slots.map((card, index) => ({ index, card: card ? summarizeCard(card) : null })),
+    zones: {
+      hand: playerId === "player" ? side.hand.map(summarizeCard) : [],
+      deck: playerId === "player" ? side.deck.map(summarizeCard) : [],
+      discard: side.discard.map(summarizeCard),
+      board: boardCards.map(summarizeCard),
+    },
   };
 }
 
@@ -99,9 +107,16 @@ function cardLabel(card: MatchDebugCardSummary | null) {
 function collectZones(summary: MatchDebugStateSummary, side: PlayerId) {
   const result = new Map<string, MatchDebugZone>();
   const sideSummary = summary[side];
+
+  const zoneOrder: MatchDebugZone[] = ["hand", "board", "discard", "deck"];
+  zoneOrder.forEach((zone) => {
+    sideSummary.zones?.[zone]?.forEach((card) => result.set(card.instanceId, zone));
+  });
+
   sideSummary.slots.forEach((slot) => {
     if (slot.card) result.set(slot.card.instanceId, "board");
   });
+
   return result;
 }
 

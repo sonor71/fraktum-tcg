@@ -136,7 +136,19 @@ export function canPlayCardWithCurrentResources(state: MatchState, playerId: Pla
 
 export function canPlayerMakeAnyMove(state: MatchState, playerId: PlayerId) {
   if (!canPlayerPlayCards(state, playerId)) return false;
-  return state[playerId].hand.some((card) => canPlayCardWithCurrentResources(state, playerId, card));
+  if (state[playerId].hand.some((card) => canPlayCardWithCurrentResources(state, playerId, card))) return true;
+
+  const turn = state.currentTurn;
+  const canSpendAction = !turn || turn.d20Limit === "unlimited" || turn.playsUsed < turn.d20Limit;
+  const canDestroyOwnCard = Boolean(
+    turn?.playerId === playerId &&
+      !turn.destroyedOwnCard &&
+      canSpendAction &&
+      state[playerId].will >= 1 &&
+      getOccupiedSlotCount(state, playerId) > 0,
+  );
+
+  return canDestroyOwnCard;
 }
 
 export function getPlayableCards(state: MatchState, playerId: PlayerId) {

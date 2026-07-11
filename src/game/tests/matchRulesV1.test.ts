@@ -71,19 +71,22 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(getD20PlayLimit(6)).toBe(6);
     expect(getD20PlayLimit(7)).toBe("unlimited");
   });
-  it("9-11 roulette triggers once and rerolls 15-16 for a limit", () => {
+  it("9-11 roulette triggers per turn and rerolls 15-16 for a limit", () => {
     let state = createInitialMatchState({ seed: 31 });
     state = { ...state, rngSeed: 1198, activePlayerId: "player", phase: "roll" };
     const next = rollD20(state, "player");
-    expect(next.rouletteUsedThisBattle).toBe(true);
+    expect(next.currentTurn?.rouletteResolvedThisTurn).toBe(true);
+    expect(next.activeRouletteEvent).toBeDefined();
     expect(next.lastRoll).not.toBe(15);
     const again = rollD20({ ...next, phase: "roll", rngSeed: 1198 }, "player");
     expect(again.log.filter((l) => l.includes("Fate Roulette activated"))).toHaveLength(1);
   });
-  it("12 D20=20 makes cards free only for current turn", () => {
+  it("12 D20=20 does not make cards free; WORLD_WITHOUT_WILL does", () => {
     const card = inst(def("free", { cost: 5 }), "player");
     let state = withTurn(createInitialMatchState(), "player");
-    state = { ...state, player: { ...state.player, will: 0, hand: [card] }, currentTurn: { ...state.currentTurn!, freeCards: true } };
+    state = { ...state, player: { ...state.player, will: 0, hand: [card] }, lastRoll: 20, currentTurn: { ...state.currentTurn!, freeCards: false } };
+    expect(playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 }).player.hand).toHaveLength(1);
+    state = { ...state, currentTurn: { ...state.currentTurn!, freeCards: true } };
     const played = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
     expect(played.player.will).toBe(0);
     expect(played.currentTurn?.playedCosts[0].cost).toBe(5);
@@ -122,19 +125,21 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(next.board.playerSlots[0]).toBeNull();
     expect(next.player.discard).toContain(unit);
   });
-  it("23-25 skip penalty is exactly 3 and not applied after a play", () => {
+  it("23-25 fatigue applies only with empty hand and deck", () => {
     let state = withTurn(createInitialMatchState(), "player");
+    expect(endTurn(state, "player").player.hp).toBe(state.player.hp);
+    state = { ...state, player: { ...state.player, hand: [], deck: [] } };
     expect(endTurn(state, "player").player.hp).toBe(state.player.hp - 3);
     const card = inst(def("p"), "player");
-    state = { ...state, player: { ...state.player, will: 5, hand: [card] } };
+    state = { ...state, player: { ...state.player, will: 5, hand: [card], deck: [] } };
     const played = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
-    expect(endTurn(played, "player").player.hp).toBe(played.player.hp);
+    expect(endTurn(played, "player").player.hp).toBe(played.player.hp - 3);
   });
   it("26-28 periodic/sequence damage can end as draw and HP clamps to zero", () => {
     const p = damageHero({ ...createInitialMatchState().player, hp: 2 }, 5).player;
     expect(p.hp).toBe(0);
     const state = { ...createInitialMatchState(), player: { ...createInitialMatchState().player, hp: 0 }, enemy: { ...createInitialMatchState().enemy, hp: 0 } };
-    expect(endTurn(withTurn(state, "player"), "player").winner).toBe("draw");
+    expect(endTurn(withTurn({ ...state, seriesScore: { player: 1, enemy: 1 } }, "player"), "player").winner).toBe("draw");
   });
   it("29-32 Caduceus scores battle draw once per series", () => {
     expect(resolveCaduceusBattleDraw({ ...createInitialMatchState(), seriesScore: { player: 1, enemy: 0 } }).seriesScore).toEqual({ player: 2, enemy: 1 });

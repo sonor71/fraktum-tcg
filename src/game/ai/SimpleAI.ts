@@ -18,22 +18,6 @@ function addLog(state: MatchState, message: string): MatchState {
   return { ...state, log: [...state.log, message].slice(-80) };
 }
 
-function consumeSkipTurn(state: MatchState): { state: MatchState; skipped: boolean } {
-  const skip = state.enemy.effects.find((effect) => effect.id === "skip_next_turn");
-  if (!skip) return { state, skipped: false };
-
-  return {
-    skipped: true,
-    state: {
-      ...state,
-      enemy: {
-        ...state.enemy,
-        effects: state.enemy.effects.filter((effect) => effect !== skip),
-      },
-    },
-  };
-}
-
 function cardLooksAggressive(card: CardInstance) {
   const key = card.definition.effectKey ?? "";
   const effects = card.definition.effects ?? [];
@@ -81,13 +65,8 @@ export function runSimpleAI(state: MatchState): MatchState {
 
   let next = state;
 
-  const skipCheck = consumeSkipTurn(next);
-  if (skipCheck.skipped) {
-    next = addLog(skipCheck.state, "AI skipped this turn due to an active effect.");
-    return endTurn(next, "enemy");
-  }
-
   next = rollD20(next, "enemy");
+  if (next.phase !== "enemy" || next.activePlayerId !== "enemy") return next;
 
   let cardsPlayed = 0;
 
@@ -124,7 +103,7 @@ export function runSimpleAI(state: MatchState): MatchState {
 
     cardsPlayed += 1;
 
-    if (beforeWill === next.enemy.will && getCardCost(chosen) > 0) {
+    if (beforeWill === next.enemy.will && getCardCost(chosen) > 0 && !next.currentTurn?.freeCards) {
       next = addLog(next, `AI warning: ${getCardTitle(chosen)} did not spend Will correctly.`);
       break;
     }

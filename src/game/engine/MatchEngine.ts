@@ -29,7 +29,7 @@ import {
   slotsKey,
 } from "./TurnManager";
 
-import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, SKIP_TURN_DAMAGE, BASE_TURN_SECONDS, getD20PlayLimit, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
+import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, FATIGUE_DAMAGE, BASE_TURN_SECONDS, FATE_ROULETTE_EVENTS, getD20PlayLimit, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
 const LOG_LIMIT = 80;
 
 type WillMatchConfig = {
@@ -49,7 +49,7 @@ function safeInteger(value: unknown, fallback: number) {
 function normalizeWillMatchConfig(value: unknown): Required<WillMatchConfig> {
   const record = readRecord(value);
   const maxWill = Math.max(1, Math.min(20, safeInteger(record.maxWill, DEFAULT_MAX_WILL)));
-  const regenPerRound = Math.max(0, Math.min(10, safeInteger(record.regenPerRound ?? record.willRegen, DEFAULT_WILL_REGEN)));
+  const regenPerRound = Math.max(DEFAULT_WILL_REGEN, Math.min(10, safeInteger(record.regenPerRound ?? record.willRegen, DEFAULT_WILL_REGEN)));
 
   return { maxWill, regenPerRound };
 }
@@ -324,6 +324,15 @@ function triggerTurnStartEffects(state: MatchState, playerId: PlayerId): MatchSt
 }
 
 
+export function consumeSkipTurn(state: MatchState, playerId: PlayerId): { state: MatchState; skipped: boolean } {
+  const effects = getSideEffects(state, playerId);
+  const skip = effects.find((effect) => normalizeEffectId(effect.id) === "skip_next_turn");
+  if (!skip) return { state, skipped: false };
+
+  const next = setSideEffects(state, playerId, effects.filter((effect) => effect !== skip));
+  return { state: log(next, `[TURN_SKIPPED] ${playerLabel(playerId)} skipped turn due to ${String(skip.source ?? "freeze")}.`), skipped: true };
+}
+
 function tryBlockCardPlayWithEffects(state: MatchState, playerId: PlayerId) {
   const effects = getSideEffects(state, playerId);
   const disorder = effects.find((effect) => normalizeEffectId(effect.id) === "psychological_disorder");
@@ -421,7 +430,6 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
     battleNumber: 1,
     seriesScore: { player: 0, enemy: 0 },
     caduceusUsed: false,
-    rouletteUsedThisBattle: false,
   };
 
   state = initializeBattleWill(state, firstPlayerId);
@@ -430,10 +438,42 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
 
 export const startMatch = createInitialMatchState;
 
+function collectBattleDefinitions(state: MatchState, playerId: PlayerId): CardDefinition[] {
+  const side = state[playerId];
+  const slotCards = state.board[slotsKey(playerId)].filter((card): card is CardInstance => Boolean(card));
+  const cards = [side.hero, ...side.deck, ...side.hand, ...side.discard, ...(side.exile ?? []), ...side.bonusCards, ...slotCards];
+  const unique = new Map<string, CardDefinition>();
+  cards.forEach((card) => unique.set(card.baseId, card.definition));
+  return [...unique.values()];
+}
+
+function startNextBattle(state: MatchState, scores: Record<PlayerId, number>, reason: string): MatchState {
+  const nextBattle = createInitialMatchState({
+    seed: state.rngSeed,
+    playerDeck: collectBattleDefinitions(state, "player"),
+    enemyDeck: collectBattleDefinitions(state, "enemy"),
+  });
+
+  return log({
+    ...nextBattle,
+    id: state.id,
+    battleNumber: (state.battleNumber ?? 1) + 1,
+    seriesScore: scores,
+    caduceusUsed: state.caduceusUsed,
+    battleResult: undefined,
+  }, `${reason} Battle result: ${state.battleResult ?? "complete"}. Series score ${scores.player}:${scores.enemy}. Next battle starts.`);
+}
+
 function finishBattle(state: MatchState, result: PlayerId | "draw", reason: string): MatchState {
   const scores = scoreBattleResult(state.seriesScore ?? { player: 0, enemy: 0 }, result);
   const matchWinner = getMatchWinner(scores);
-  return log({ ...state, seriesScore: scores, phase: "ended", winner: matchWinner ?? result }, `${reason} Battle result: ${result}. Series score ${scores.player}:${scores.enemy}.`);
+  const scoredState = { ...state, seriesScore: scores, battleResult: result };
+
+  if (!matchWinner) {
+    return startNextBattle(scoredState, scores, reason);
+  }
+
+  return log({ ...scoredState, phase: "ended", winner: matchWinner }, `${reason} Battle result: ${result}. Series score ${scores.player}:${scores.enemy}. Match result: ${matchWinner}.`);
 }
 
 export function resolveCaduceusBattleDraw(state: MatchState, sourceName = "Caduceus"): MatchState {
@@ -488,10 +528,10 @@ function rollD20ForLimit(state: MatchState): { state: MatchState; roll: number; 
   let next: MatchState = { ...state, rngSeed: roll.seed };
   let rouletteActivated = false;
 
-  if (isFateRouletteRoll(roll.value) && !next.rouletteUsedThisBattle) {
-    const eventRoll = rollDie(next.rngSeed, 5);
-    const events = ["MERGED_DECKS", "WORLD_WITHOUT_WILL", "BLIND_TOP", "HIDDEN_HAND", "EMPTY_OUTCOME"];
-    next = log({ ...next, rngSeed: eventRoll.seed, rouletteUsedThisBattle: true, activeRouletteEvent: events[eventRoll.value - 1] }, `[ROULETTE] Fate Roulette activated: ${events[eventRoll.value - 1]}.`);
+  if (isFateRouletteRoll(roll.value) && !next.currentTurn?.rouletteResolvedThisTurn) {
+    const eventRoll = rollDie(next.rngSeed, FATE_ROULETTE_EVENTS.length);
+    const event = FATE_ROULETTE_EVENTS[eventRoll.value - 1];
+    next = log({ ...next, rngSeed: eventRoll.seed, activeRouletteEvent: event }, `[ROULETTE] Fate Roulette activated: ${event}.`);
     rouletteActivated = true;
     do {
       roll = rollDie(next.rngSeed, 20);
@@ -508,7 +548,9 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
   if (playerId === "enemy" && state.phase !== "enemy") return log(state, "AI can roll only during enemy phase.");
 
   const started = beginTurnIfNeeded(state, playerId);
-  const afterCombat = checkWinCondition(moveDestroyedCardsToDiscard(resolveFieldCombat(started, playerId)));
+  const skip = consumeSkipTurn(started, playerId);
+  if (skip.skipped) return endTurn(skip.state, playerId);
+  const afterCombat = checkWinCondition(moveDestroyedCardsToDiscard(resolveFieldCombat(skip.state, playerId)));
   if (afterCombat.phase === "ended") return afterCombat;
   const result = rollD20ForLimit(afterCombat);
   const d20Limit = getD20PlayLimit(result.roll);
@@ -523,13 +565,14 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
         playsUsed: 0,
         cardsPlayed: 0,
         destroyedOwnCard: false,
-        freeCards: result.roll === 20,
+        freeCards: result.state.activeRouletteEvent === "WORLD_WITHOUT_WILL",
+        rouletteResolvedThisTurn: result.rouletteActivated,
         skipDamageApplied: false,
         timerSeconds: BASE_TURN_SECONDS,
         playedCosts: [],
       },
     },
-    `${playerLabel(playerId)} rolled D20: ${result.roll}. Play limit: ${d20Limit === "unlimited" ? "unlimited" : d20Limit}${result.roll === 20 ? ", cards are free this turn" : ""}.`,
+    `${playerLabel(playerId)} rolled D20: ${result.roll}. Play limit: ${d20Limit === "unlimited" ? "unlimited" : d20Limit}${result.state.activeRouletteEvent === "WORLD_WITHOUT_WILL" ? ", WORLD_WITHOUT_WILL makes cards free this turn" : ""}.`,
   );
 }
 
@@ -685,8 +728,8 @@ export function endTurn(state: MatchState, playerId: PlayerId): MatchState {
 
   let endingState = state;
   const turnState = endingState.currentTurn;
-  if (turnState?.playerId === playerId && turnState.cardsPlayed === 0 && !turnState.skipDamageApplied) {
-    endingState = dealDirectHeroDamage(endingState, playerId, SKIP_TURN_DAMAGE, "Skip penalty");
+  if (turnState?.playerId === playerId && !turnState.skipDamageApplied && endingState[playerId].deck.length === 0 && endingState[playerId].hand.length === 0) {
+    endingState = dealDirectHeroDamage(endingState, playerId, FATIGUE_DAMAGE, "Fatigue");
     endingState = { ...endingState, currentTurn: { ...turnState, skipDamageApplied: true } };
   }
   endingState = checkWinCondition(endingState);
@@ -719,10 +762,6 @@ export function endTurn(state: MatchState, playerId: PlayerId): MatchState {
   return checkWinCondition(next);
 }
 
-function hasNoCardsToContinue(state: MatchState, playerId: PlayerId) {
-  return state[playerId].deck.length === 0 && state[playerId].hand.length === 0;
-}
-
 function finishByHpComparison(state: MatchState, reason: string): MatchState {
   const playerHp = Number(state.player.hp ?? 0);
   const enemyHp = Number(state.enemy.hp ?? 0);
@@ -742,10 +781,6 @@ export function checkWinCondition(state: MatchState): MatchState {
 
   if (state.enemy.hp <= 0) {
     return finishBattle(state, "player", "Enemy hero fell.");
-  }
-
-  if (hasNoCardsToContinue(state, "player") && hasNoCardsToContinue(state, "enemy")) {
-    return finishByHpComparison(state, "Both players have no cards left in hand or deck.");
   }
 
   return state;

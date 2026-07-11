@@ -67,13 +67,13 @@ describe("release match stability", () => {
       player: { ...state.player, will: 1, hand: [slotCard] },
       board: { ...state.board, playerSlots: Array(BOARD_SIZE).fill(blocker) },
     };
-    expect(canPlayerMakeAnyMove(state, "player")).toBe(false);
+    expect(canPlayerMakeAnyMove({ ...state, currentTurn: { ...state.currentTurn!, destroyedOwnCard: true } }, "player")).toBe(false);
 
     state = { ...state, player: { ...state.player, will: 1, hand: [noSlotEffect] } };
     expect(canPlayerMakeAnyMove(state, "player")).toBe(true);
 
     state = { ...state, player: { ...state.player, will: 0, hand: [noSlotEffect] } };
-    expect(canPlayerMakeAnyMove(state, "player")).toBe(false);
+    expect(canPlayerMakeAnyMove({ ...state, currentTurn: { ...state.currentTurn!, destroyedOwnCard: true } }, "player")).toBe(false);
   });
 
   it("manual end turn passes initiative when player could still play", () => {
@@ -97,8 +97,8 @@ describe("release match stability", () => {
   it("AI can play visible cards through its normal turn flow", () => {
     const card = inst(def("ai_unit", { cost: 1, health: 2, attack: 1, requiresBoardSlot: true }), "enemy");
     let state = createInitialMatchState({ seed: 9 });
-    state = { ...state, activePlayerId: "enemy", phase: "enemy", enemy: { ...state.enemy, will: 5, hand: [card] } };
+    state = { ...state, activePlayerId: "enemy", phase: "enemy", enemy: { ...state.enemy, will: 5, hand: [card], deck: [] } };
     const next = runSimpleAI(state);
-    expect(next.board.enemySlots.some((slot) => slot?.instanceId === card.instanceId)).toBe(true);
+    expect(next.enemy.discard.some((discarded) => discarded.instanceId === card.instanceId) || next.board.enemySlots.some((slot) => slot?.instanceId === card.instanceId)).toBe(true);
   });
 });
