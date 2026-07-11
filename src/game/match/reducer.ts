@@ -10,7 +10,7 @@ import type {
   UnitState,
 } from "./types";
 
-const MAX_BOARD_SIZE = 5;
+const MAX_BOARD_SIZE = 6;
 const MAX_HAND_SIZE = 10;
 
 function makeLog(text: string): MatchLogEntry {

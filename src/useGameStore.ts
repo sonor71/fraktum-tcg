@@ -517,48 +517,23 @@ function prunePendingPurchases(purchases: Record<string, PendingPackPurchase>) {
 }
 
 
-function shuffleArray<T>(values: readonly T[]) {
-  const result = [...values];
-  for (let i = result.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
-function getOwnedBaseIds(ownedCards: readonly OwnedCard[]) {
-  return new Set(ownedCards.map((card) => card.baseId).filter(Boolean));
-}
-
 function buildUniquePackBaseIds(
-  ownedCards: readonly OwnedCard[],
   requestedBaseIds: readonly string[],
   targetCount = requestedBaseIds.length
 ) {
   const target = Math.max(0, Math.floor(Number(targetCount) || 0));
   if (target <= 0) return [] as string[];
 
-  const blockedBaseIds = getOwnedBaseIds(ownedCards);
   const selectedBaseIds: string[] = [];
-
-  const tryAdd = (baseId: string) => {
-    if (!CARDS_BY_ID[baseId]) return false;
-    if (blockedBaseIds.has(baseId)) return false;
-    blockedBaseIds.add(baseId);
-    selectedBaseIds.push(baseId);
-    return true;
-  };
+  const selectedBaseIdSet = new Set<string>();
 
   for (const baseId of requestedBaseIds) {
     if (selectedBaseIds.length >= target) break;
-    tryAdd(baseId);
-  }
+    if (!CARDS_BY_ID[baseId]) continue;
+    if (selectedBaseIdSet.has(baseId)) continue;
 
-  if (selectedBaseIds.length < target) {
-    for (const definition of shuffleArray(CARDS)) {
-      if (selectedBaseIds.length >= target) break;
-      tryAdd(definition.id);
-    }
+    selectedBaseIdSet.add(baseId);
+    selectedBaseIds.push(baseId);
   }
 
   return selectedBaseIds;
@@ -1024,14 +999,14 @@ export const useGameStore = create<GameState>()(
 
       openPack: (definitions, packId) => {
         const requestedBaseIds = definitions.map((card) => card.id);
-        const uniqueBaseIds = buildUniquePackBaseIds(get().ownedCards, requestedBaseIds, requestedBaseIds.length);
+        const uniqueBaseIds = buildUniquePackBaseIds(requestedBaseIds, requestedBaseIds.length);
         const issued = get().addOwnedCards(uniqueBaseIds.map((baseId) => ({ baseId, packId })));
         set({ openedPacksCount: get().openedPacksCount + 1 });
         return issued;
       },
 
       openPackByBaseIds: (baseIds, packId) => {
-        const uniqueBaseIds = buildUniquePackBaseIds(get().ownedCards, baseIds, baseIds.length);
+        const uniqueBaseIds = buildUniquePackBaseIds(baseIds, baseIds.length);
         const issued = get().grantCardsByBaseIds(uniqueBaseIds, packId);
         set({ openedPacksCount: get().openedPacksCount + 1 });
         return issued;
@@ -1066,7 +1041,7 @@ export const useGameStore = create<GameState>()(
         const validBaseIds = baseIds.filter((baseId) => Boolean(CARDS_BY_ID[baseId]));
         if (validBaseIds.length !== baseIds.length) return null;
 
-        const uniqueBaseIds = buildUniquePackBaseIds(get().ownedCards, validBaseIds, validBaseIds.length);
+        const uniqueBaseIds = buildUniquePackBaseIds(validBaseIds, validBaseIds.length);
         const issued = get().addOwnedCards(uniqueBaseIds.map((baseId) => ({ baseId, packId })));
         const pendingPackPurchases = { ...get().pendingPackPurchases };
         delete pendingPackPurchases[sessionId];
