@@ -734,9 +734,9 @@ export default function MatchPage() {
   const submitGameAction = useCallback(async (action: GameAction) => {
     const before = createMatchDebugStateSummary(stateRef.current);
     recordDebug({
-      source: isOnlineMode ? "online_local" : action.type === "AI_TURN" ? "ai" : "player",
+      source: action.type === "START_NEXT_BATTLE" || action.type === "START_MATCH" ? "system" : isOnlineMode ? "online_local" : action.type === "AI_TURN" ? "ai" : "player",
       category: "action",
-      actionType: action.type,
+      actionType: action.type === "START_NEXT_BATTLE" ? "START_NEXT_BATTLE_REQUESTED" : action.type,
       message: `${isOnlineMode ? "Queue online" : "Dispatch local"} action ${action.type}.`,
       action,
       before,
@@ -918,6 +918,24 @@ export default function MatchPage() {
       payload: buildMatchPayloadFromDeck(ownedCards, deckIds, getWillStatsFromUpgrades(willUpgrades), Date.now()),
     } as GameAction);
   }, [recordDebug, deckIds, ownedCards, willUpgrades]);
+
+  const handleStartNextBattle = useCallback(() => {
+    const currentState = stateRef.current;
+
+    if (currentState.phase !== "betweenBattles") {
+      return;
+    }
+
+    clearTimer(pendingPlayTimer);
+    clearTimer(aiTurnTimer);
+    clearTimer(autoPlayerTurnTimer);
+    setSelectedCardId(null);
+    setAiThinking(false);
+    void submitGameAction({
+      type: "START_NEXT_BATTLE",
+      battleNumber: currentState.battleNumber,
+    } as GameAction);
+  }, [submitGameAction]);
 
   const handleReturnToMenu = useCallback(() => {
     clearTimer(pendingPlayTimer);
@@ -1226,9 +1244,6 @@ export default function MatchPage() {
 
   const mergedLog = useMemo(() => [...state.log, ...uiLog].slice(-18), [state.log, uiLog]);
 
-  const onlineOpponent = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
-  const opponentDisplayName = isOnlineMode ? onlineOpponent?.playerName ?? "Opponent" : null;
-  const opponentRankLabel = isOnlineMode ? `RANK ${onlineOpponent?.level ?? "III"}` : null;
 
   if (isOnlineMode && onlineQueueState !== "matched") {
     return (
@@ -1302,6 +1317,7 @@ export default function MatchPage() {
         onEndTurn={handleEndTurn}
         onAiTurn={handleAiTurn}
         onRestart={handleRestart}
+        onStartNextBattle={handleStartNextBattle}
         onConcede={handleConcede}
         onReturnToMenu={handleReturnToMenu}
         reward={matchReward}

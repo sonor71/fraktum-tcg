@@ -227,7 +227,7 @@ export function findFrontEnemySlot(state: MatchState, playerId: PlayerId, ownSlo
     return ownSlotIndex;
   }
 
-  return slots.findIndex(Boolean);
+  return -1;
 }
 
 export function getPreferredFreeSlotIndex(state: MatchState, playerId: PlayerId) {

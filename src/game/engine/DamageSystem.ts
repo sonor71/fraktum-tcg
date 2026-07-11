@@ -13,9 +13,10 @@ export function damageHero(player: PlayerState, raw: number) {
 export function healHero(player: PlayerState, amount: number) { return { ...player, hp: Math.min(player.maxHp, player.hp + Math.max(0, Math.floor(amount))) }; }
 
 function attackValue(card: CardInstance | null) { return Math.max(0, Math.floor(Number(card?.currentAttack ?? card?.definition.attack ?? 0))); }
-function canAttack(card: CardInstance | null, ownerPersonalTurnsTaken: number) {
+function canAttack(card: CardInstance | null, ownerPersonalTurnsTaken: number, ownerId: PlayerId, activeAttackerId: PlayerId) {
   if (!card || attackValue(card) <= 0 || card.definition.canAttack === false) return false;
   const readyFrom = card.attackReadyFromOwnerPersonalTurn ?? 0;
+  if (activeAttackerId !== ownerId && card.ownerPersonalTurnPlayed !== undefined && ownerPersonalTurnsTaken <= readyFrom) return false;
   return ownerPersonalTurnsTaken >= readyFrom;
 }
 
@@ -75,8 +76,8 @@ export function resolveFieldCombat(state: MatchState, attackerId: PlayerId): Mat
     index,
     attackerCard: attackerSlots[index] ?? null,
     defenderCard: defenderSlots[index] ?? null,
-    attacker: canAttack(attackerSlots[index] ?? null, state[attackerId].personalTurnsTaken ?? 0) ? attackValue(attackerSlots[index] ?? null) : 0,
-    defender: canAttack(defenderSlots[index] ?? null, state[defenderId].personalTurnsTaken ?? 0) ? attackValue(defenderSlots[index] ?? null) : 0,
+    attacker: canAttack(attackerSlots[index] ?? null, state[attackerId].personalTurnsTaken ?? 0, attackerId, attackerId) ? attackValue(attackerSlots[index] ?? null) : 0,
+    defender: canAttack(defenderSlots[index] ?? null, state[defenderId].personalTurnsTaken ?? 0, defenderId, attackerId) ? attackValue(defenderSlots[index] ?? null) : 0,
   }));
 
   for (const hit of declared) {
