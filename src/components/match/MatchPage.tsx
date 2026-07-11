@@ -558,16 +558,22 @@ export default function MatchPage() {
   const onlineSeatRef = useRef<OnlineSeat | null>(null);
   const startedOnlineRoomId = useRef<string | null>(null);
 
-  const onlineOpponent = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
-  const opponentDisplayName = isOnlineMode ? onlineOpponent?.playerName ?? "Opponent" : null;
-  const opponentRankLabel = isOnlineMode ? `RANK ${onlineOpponent?.level ?? "III"}` : null;
+  const opponentUi = useMemo(() => {
+    const snapshot = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
+
+    return {
+      name: isOnlineMode ? snapshot?.playerName ?? "Opponent" : null,
+      rankLabel: isOnlineMode ? `RANK ${snapshot?.level ?? "III"}` : null,
+    };
+  }, [isOnlineMode, onlineRoom, onlineSeat]);
+
   const debugRecorder = useMatchDebugRecorder({
     enabled: true,
     state,
     matchMode: isOnlineMode ? "online" : "ai",
     roomId: onlineRoom?.id,
     seat: onlineSeat,
-    playerNames: { player: playerName || "Player", enemy: opponentDisplayName ?? "AI" },
+    playerNames: { player: playerName || "Player", enemy: opponentUi.name ?? "AI" },
   });
   const recordDebug = debugRecorder.record;
 
@@ -1304,8 +1310,8 @@ export default function MatchPage() {
         cardTravelEvents={cardTravelEvents}
         tacticalRevealEvents={tacticalRevealEvents}
         matchMode={matchMode}
-        opponentName={opponentDisplayName}
-        opponentRankLabel={opponentRankLabel}
+        opponentName={opponentUi.name}
+        opponentRankLabel={opponentUi.rankLabel}
       />
       <MatchDebugConsole
         enabled={debugRecorder.enabled}
