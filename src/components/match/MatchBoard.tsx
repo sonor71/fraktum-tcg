@@ -32,6 +32,9 @@ type MatchBoardProps = {
   fxEvents?: MatchFxEvent[];
   cardTravelEvents?: CardTravelEvent[];
   tacticalRevealEvents?: TacticalRevealEvent[];
+  matchMode?: "ai" | "online" | string;
+  opponentName?: string | null;
+  opponentRankLabel?: string | null;
 };
 
 function clampPct(value: number, max: number) {
@@ -134,15 +137,16 @@ function getActionHint(
 
 function WillStrip({ player, label, side }: { player: MatchSide; label: string; side: "player" | "enemy" }) {
   const max = Math.max(1, player.maxWill);
-  const pct = clampPct(player.will, max);
+  const isHiddenEnemyWill = side === "enemy";
+  const pct = isHiddenEnemyWill ? 0 : clampPct(player.will, max);
 
   return (
-    <div className={`matchWillStrip is-${side}`} title={`${label} Will: ${player.will}/${max}`}>
+    <div className={`matchWillStrip is-${side}`} title={`${label} Will: ${isHiddenEnemyWill ? `hidden/${max}` : `${player.will}/${max}`}`}>
       <span className="matchWillLabel">{label} Will</span>
       <div className="matchWillTrack" aria-hidden="true">
         <span className="matchWillFill" style={{ width: `${pct}%` }} />
       </div>
-      <b>{player.will}/{max}</b>
+      <b>{isHiddenEnemyWill ? `?/${max}` : `${player.will}/${max}`}</b>
     </div>
   );
 }
@@ -165,18 +169,22 @@ export function MatchBoard({
   fxEvents = [],
   cardTravelEvents = [],
   tacticalRevealEvents = [],
+  matchMode = "ai",
+  opponentName = null,
+  opponentRankLabel = null,
 }: MatchBoardProps) {
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId);
   const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner;
   const canRoll = state.activePlayerId === "player" && state.phase === "roll" && !state.winner;
   const selectedCardIsPlayable = Boolean(selectedCard && canPlay && state.player.will >= getCardCost(selectedCard));
   const playerName = getHeroName(state.player, "Brian");
-  const enemyName = getHeroName(state.enemy, "Felix");
+  const isOnlineMode = matchMode === "online";
+  const enemyName = isOnlineMode && opponentName?.trim() ? opponentName.trim() : getHeroName(state.enemy, "Felix");
+  const enemyRankLabel = isOnlineMode ? (opponentRankLabel?.trim() || "RANK III") : "AI Rank III";
   const readablePhase = getPhaseLabel(state);
   const actionHint = getActionHint(state, selectedCard, aiThinking);
   const winnerLabel = getWinnerLabel(state.winner, playerName, enemyName);
 
-  void onEndTurn;
   void onAiTurn;
 
   const arenaClassName = [
@@ -216,7 +224,7 @@ export function MatchBoard({
         <div>
           <span>Opponent</span>
           <b>{enemyName}</b>
-          <small>AI Rank III</small>
+          <small>{enemyRankLabel}</small>
         </div>
         <img src={getHeroImage(state.enemy)} alt={enemyName} draggable={false} />
       </section>
@@ -287,6 +295,9 @@ export function MatchBoard({
         <div className="matchActionRow">
           <button className="matchGhostButton is-compact" type="button" onClick={onRestart}>
             Restart
+          </button>
+          <button className="matchGhostButton is-compact" type="button" onClick={onEndTurn} disabled={!canPlay}>
+            End Turn
           </button>
           <button className="matchGhostButton is-compact is-danger" type="button" onClick={onConcede} disabled={Boolean(state.winner)}>
             Concede
