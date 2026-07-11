@@ -104,15 +104,19 @@ if (!Array.isArray(rawCards)) {
 
 export const CARDS: CardDefinition[] = rawCards.map(parseCard);
 
-const duplicateIds = CARDS.filter((card, index, cards) => cards.findIndex((other) => other.id === card.id) !== index).map(
-  (card) => card.id
-);
+const duplicateIds = CARDS.filter(
+  (card, index, cards) =>
+    cards.findIndex((other) => other.id === card.id) !== index,
+).map((card) => card.id);
+
 if (duplicateIds.length > 0) {
-  throw new Error(`[FRAKTUM] Duplicate card ids: ${[...new Set(duplicateIds)].join(", ")}.`);
+  throw new Error(
+    `[FRAKTUM] Duplicate card ids: ${[...new Set(duplicateIds)].join(", ")}.`,
+  );
 }
 
 export const CARDS_BY_ID: Record<string, CardDefinition> = Object.fromEntries(
-  CARDS.map((card) => [card.id, card])
+  CARDS.map((card) => [card.id, card]),
 );
 
 function getCardsByRarity(cards: CardDefinition[]) {
@@ -134,15 +138,28 @@ function getCardsByRarity(cards: CardDefinition[]) {
 }
 
 function getRandomItem<T>(items: readonly T[]) {
-  if (items.length === 0) throw new Error("[FRAKTUM] Cannot choose an item from an empty array.");
+  if (items.length === 0) {
+    throw new Error("[FRAKTUM] Cannot choose an item from an empty array.");
+  }
+
   return items[Math.floor(Math.random() * items.length)];
 }
 
-function pickRandomRarity(cardsByRarity: Record<CardRarity, CardDefinition[]>) {
-  const availableRarities = CARD_RARITIES.filter((rarity) => cardsByRarity[rarity].length > 0);
-  if (availableRarities.length === 0) throw new Error("[FRAKTUM] No cards are available for this pool.");
+function pickRandomRarity(
+  cardsByRarity: Record<CardRarity, CardDefinition[]>,
+) {
+  const availableRarities = CARD_RARITIES.filter(
+    (rarity) => cardsByRarity[rarity].length > 0,
+  );
 
-  const totalWeight = availableRarities.reduce((sum, rarity) => sum + RARITY_CHANCE[rarity], 0);
+  if (availableRarities.length === 0) {
+    throw new Error("[FRAKTUM] No cards are available for this pool.");
+  }
+
+  const totalWeight = availableRarities.reduce(
+    (sum, rarity) => sum + RARITY_CHANCE[rarity],
+    0,
+  );
   let roll = Math.random() * totalWeight;
 
   for (const rarity of availableRarities) {
@@ -153,19 +170,49 @@ function pickRandomRarity(cardsByRarity: Record<CardRarity, CardDefinition[]>) {
   return availableRarities[availableRarities.length - 1];
 }
 
-export function getRandomCards(count: number, source: readonly CardDefinition[] = CARDS) {
-  const safeCount = Math.max(0, Math.floor(count));
-  const cardsByRarity = getCardsByRarity([...source]);
+export function getRandomCards(
+  count: number,
+  source: readonly CardDefinition[] = CARDS,
+) {
+  const uniqueSource = [
+    ...new Map(source.map((card) => [card.id, card])).values(),
+  ];
+  const safeCount = Math.min(
+    uniqueSource.length,
+    Math.max(0, Math.floor(count)),
+  );
+  const remainingCards = [...uniqueSource];
+  const selectedCards: CardDefinition[] = [];
 
-  return Array.from({ length: safeCount }, () => {
+  while (
+    selectedCards.length < safeCount &&
+    remainingCards.length > 0
+  ) {
+    const cardsByRarity = getCardsByRarity(remainingCards);
     const rarity = pickRandomRarity(cardsByRarity);
-    return getRandomItem(cardsByRarity[rarity]);
-  });
+    const selectedCard = getRandomItem(cardsByRarity[rarity]);
+
+    selectedCards.push(selectedCard);
+
+    const selectedIndex = remainingCards.findIndex(
+      (card) => card.id === selectedCard.id,
+    );
+    if (selectedIndex >= 0) {
+      remainingCards.splice(selectedIndex, 1);
+    }
+  }
+
+  return selectedCards;
 }
 
-export function getRandomCardIdsFromPool(baseIds: readonly string[], count: number) {
+export function getRandomCardIdsFromPool(
+  baseIds: readonly string[],
+  count: number,
+) {
   const uniqueIds = [...new Set(baseIds)];
-  const pool = uniqueIds.map((id) => CARDS_BY_ID[id]).filter((card): card is CardDefinition => Boolean(card));
+  const pool = uniqueIds
+    .map((id) => CARDS_BY_ID[id])
+    .filter((card): card is CardDefinition => Boolean(card));
 
   if (pool.length === 0) {
     throw new Error("[FRAKTUM] The selected pack has no valid cards.");
