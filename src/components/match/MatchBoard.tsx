@@ -25,6 +25,7 @@ type MatchBoardProps = {
   onEndTurn: () => void;
   onAiTurn: () => void;
   onRestart: () => void;
+  onStartNextBattle: () => void;
   onConcede: () => void;
   onReturnToMenu: () => void;
   reward?: MatchRewardResult | null;
@@ -145,6 +146,7 @@ export function MatchBoard({
   onEndTurn,
   onAiTurn,
   onRestart,
+  onStartNextBattle,
   onConcede,
   onReturnToMenu,
   reward = null,
@@ -158,6 +160,7 @@ export function MatchBoard({
   opponentRankLabel = null,
 }: MatchBoardProps) {
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId);
+  const isBetweenBattles = state.phase === "betweenBattles" && !state.winner;
   const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner;
   const canRoll = state.activePlayerId === "player" && state.phase === "roll" && !state.winner;
   const selectedCardIsPlayable = Boolean(selectedCard && canPlay && state.player.will >= getEffectiveCardCost(state, "player", selectedCard));
@@ -168,6 +171,8 @@ export function MatchBoard({
   const readablePhase = getPhaseLabel(state);
   const actionHint = getActionHint(state, selectedCard, aiThinking);
   const winnerLabel = getWinnerLabel(state.winner, playerName, enemyName);
+  const battleResultTitle = state.battleResult === "player" ? "ПОБЕДА" : state.battleResult === "enemy" ? "ПОРАЖЕНИЕ" : "НИЧЬЯ";
+  const seriesScore = state.seriesScore ?? { player: 0, enemy: 0 };
 
   void onAiTurn;
 
@@ -178,6 +183,7 @@ export function MatchBoard({
     selectedCardIsPlayable ? "can-drop-card" : "",
     aiThinking ? "is-ai-thinking" : "",
     state.winner ? "is-match-ended" : "",
+    isBetweenBattles ? "is-between-battles" : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -277,9 +283,11 @@ export function MatchBoard({
         </div>
 
         <div className="matchActionRow">
-          <button className="matchGhostButton is-compact" type="button" onClick={onRestart}>
-            Restart
-          </button>
+          {!isBetweenBattles ? (
+            <button className="matchGhostButton is-compact" type="button" onClick={onRestart}>
+              Restart
+            </button>
+          ) : null}
           <button className="matchGhostButton is-compact" type="button" onClick={onEndTurn} disabled={!canPlay}>
             End Turn
           </button>
@@ -322,6 +330,29 @@ export function MatchBoard({
         <div className="matchAiThinkingVeil" aria-hidden="true">
           <span />
         </div>
+      ) : null}
+
+      {isBetweenBattles ? (
+        <section className="matchWinnerOverlay matchBattleResultOverlay" role="dialog" aria-modal="true" aria-live="assertive">
+          <div className="matchWinnerCard is-rewarded">
+            <span>БОЙ {state.battleNumber ?? 1} ЗАВЕРШЁН</span>
+            <h2>{battleResultTitle}</h2>
+            <div className="matchBattleResultScore" aria-label="Series score">
+              <b>{playerName}</b>
+              <strong>{seriesScore.player} — {seriesScore.enemy}</strong>
+              <b>{enemyName}</b>
+            </div>
+            {state.battleEndReason ? (
+              <p>Причина: {state.battleEndReason}</p>
+            ) : null}
+            <p>Победитель боя: {state.battleResult === "player" ? playerName : state.battleResult === "enemy" ? enemyName : "ничья"}</p>
+            <div className="matchWinnerActions">
+              <button className="matchGoldButton" type="button" onClick={onStartNextBattle}>
+                СЛЕДУЮЩИЙ БОЙ
+              </button>
+            </div>
+          </div>
+        </section>
       ) : null}
 
       {state.winner ? (
