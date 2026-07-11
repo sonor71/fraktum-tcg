@@ -24,4 +24,37 @@ concurrency:
 
 jobs:
   build-and-release:
-   
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build game
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build
+
+      - name: Create launcher archive
+        run: |
+          mkdir -p release
+          cd dist
+          zip -r ../release/fraktum-game-v0.1.${{ github.run_number }}.zip .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: game-v0.1.${{ github.run_number }}
+          name: Fraktum Game v0.1.${{ github.run_number }}
+          files: release/fraktum-game-v0.1.${{ github.run_number }}.zip
+          generate_release_notes: true
