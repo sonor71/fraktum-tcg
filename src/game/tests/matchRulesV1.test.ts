@@ -3,7 +3,7 @@ import type { CardDefinition, CardInstance, MatchState, PlayerId } from "../core
 import { getBonusPercent, scaleByElementBonus } from "../engine/BonusSystem";
 import { damageHero, resolveFieldCombat } from "../engine/DamageSystem";
 import { drawCards } from "../engine/DrawSystem";
-import { createInitialMatchState, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
+import { createInitialMatchState, dispatch, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
 import { BOARD_SIZE, clampTimerSeconds, getD20PlayLimit } from "../engine/Rules";
 
 const def = (id: string, partial: Partial<CardDefinition> = {}): CardDefinition => ({
@@ -79,16 +79,28 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(getD20PlayLimit(6)).toBe(6);
     expect(getD20PlayLimit(7)).toBe("unlimited");
   });
-  it("9-11 roulette triggers per turn and rerolls 15-16 for a limit", () => {
+  it("9-11 roulette pauses the turn, then confirm rerolls 15-16 for a limit", () => {
     let state = createInitialMatchState({ seed: 31 });
     state = { ...state, rngSeed: 1198, activePlayerId: "player", phase: "roll" };
-    const next = rollD20(state, "player");
-    expect(next.currentTurn?.rouletteResolvedThisTurn).toBe(true);
-    expect(next.activeRouletteEvent).toBeDefined();
-    expect(next.lastRoll).not.toBe(15);
-    const again = rollD20({ ...next, phase: "roll", rngSeed: 1198 }, "player");
-    expect(next.rouletteUsedThisBattle).toBe(true);
-    expect(again.log.filter((l) => l.includes("[ROULETTE_STARTED]"))).toHaveLength(1);
+    const triggered = rollD20(state, "player");
+    expect(triggered.phase).toBe("roulette");
+    expect(triggered.rouletteState?.stage).toBe("awaitingSpin");
+    expect(triggered.rouletteState?.event).toBeUndefined();
+    expect(triggered.activeRouletteEvent).toBeUndefined();
+    expect(triggered.lastRoll).toBe(15);
+    expect(triggered.rouletteUsedThisBattle).toBe(true);
+
+    const spin = dispatch(triggered, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    const duplicateSpin = dispatch(spin, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(duplicateSpin.rouletteState?.event).toBe(spin.rouletteState?.event);
+
+    const reveal = dispatch(spin, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(reveal.rouletteState?.stage).toBe("result");
+    const confirmed = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
+    expect(confirmed.rouletteState).toBeUndefined();
+    expect(confirmed.currentTurn?.rouletteResolvedThisTurn).toBe(true);
+    expect(confirmed.lastRoll).not.toBe(15);
+    expect(confirmed.phase).toBe("main");
   });
   it("12 D20=20 makes cards free for current turn", () => {
     const card = inst(def("free", { cost: 5 }), "player");

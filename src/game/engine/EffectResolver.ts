@@ -1,5 +1,5 @@
 import type { CardInstance, MatchState, PlayerId, TargetRef } from "../core/types";
-import { rollDie, shuffleWithSeed } from "./Random";
+import { rollDie } from "./Random";
 import { resolveCaduceusBattleDraw } from "./MatchEngine";
 import {
   getCardBoardMaxHp,
@@ -10,7 +10,7 @@ import {
   playerLabel,
   slotsKey,
 } from "./TurnManager";
-import { FATE_ROULETTE_EVENTS } from "./Rules";
+import { createFateRouletteState } from "./FateRoulette";
 
 const LOG_LIMIT = 80;
 
@@ -334,7 +334,7 @@ function getKnownCardEffects(card: CardInstance): RawEffect[] {
   switch (card.baseId || card.definition.id) {
     case "energy_sword": return [{ op: "damageFront", amount: 3 }, { op: "damageHero", amount: 2, target: "enemyHero" }];
     case "sandstorm": return [{ op: "randomDamage", min: 3, max: 4, target: "enemy" }];
-    case "shadow_sword": return [{ op: "damageFront", amount: 2 }, { op: "applyAilment", target: "enemy", amount: 1 }];
+    case "shadow_sword": return [{ op: "damageFront", amount: 2 }];
     case "magician": return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
     case "elven_sword": return [{ op: "damage", amount: 3, target: "frontEnemy" }];
     case "hunter": return [{ op: "damage", amount: 3, target: "frontEnemy" }];
@@ -342,7 +342,7 @@ function getKnownCardEffects(card: CardInstance): RawEffect[] {
     case "valkyrie": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
     case "thunderer": return [{ op: "damageHero", amount: 4, target: "enemyHero" }, { op: "damageFront", amount: 3 }];
     case "thunderbolts": return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
-    case "warlock": return [{ op: "damageAllEnemySlots", min: 3, max: 4 }, { op: "damageHero", amount: 4, target: "enemyHero" }, { op: "applyFriday", target: "enemy" }];
+    case "warlock": return [{ op: "damageAllEnemySlots", min: 3, max: 4 }, { op: "damageHero", amount: 4, target: "enemyHero" }];
     case "excalibur": return [{ op: "damage", amount: 10, target: "frontEnemy" }, { op: "returnPlayedToDeck" }];
     case "fire": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
     case "ice": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
@@ -858,25 +858,9 @@ function forceDrawMatch(state: MatchState, sourceName: string): MatchState {
   return resolveCaduceusBattleDraw(state, sourceName);
 }
 
-function roulette(state: MatchState, _playerId: PlayerId, sourceName: string) {
-  const roll = rollDie(state.rngSeed, FATE_ROULETTE_EVENTS.length);
-  const event = FATE_ROULETTE_EVENTS[roll.value - 1];
-  let next: MatchState = { ...state, rngSeed: roll.seed, activeRouletteEvent: event };
-
-  if (event === "MERGED_DECKS") {
-    const merged = shuffleWithSeed([...next.player.deck, ...next.enemy.deck], next.rngSeed);
-    const half = Math.ceil(merged.items.length / 2);
-    next = {
-      ...next,
-      rngSeed: merged.seed,
-      player: { ...next.player, deck: merged.items.slice(0, half) },
-      enemy: { ...next.enemy, deck: merged.items.slice(half) },
-    };
-  } else if (event === "WORLD_WITHOUT_WILL") {
-    next = { ...next, currentTurn: next.currentTurn ? { ...next.currentTurn, freeCards: true } : next.currentTurn };
-  }
-
-  return log(next, `[ROULETTE] ${sourceName} resolved official event ${event}.`);
+function roulette(state: MatchState, playerId: PlayerId, sourceName: string) {
+  if (state.rouletteState) return log(state, `[ROULETTE] ${sourceName} tried to start roulette while one is already active.`);
+  return createFateRouletteState(state, playerId, 15);
 }
 
 function logKnowledge(state: MatchState, targetPlayerId: PlayerId, sourceName: string) {

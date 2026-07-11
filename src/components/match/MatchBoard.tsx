@@ -12,6 +12,7 @@ import { MatchFxLayer, type MatchFxEvent } from "./MatchFxLayer";
 import { CardTravelLayer, type CardTravelEvent } from "./CardTravelLayer";
 import type { MatchRewardResult } from "../../useGameStore";
 import { TacticalRevealLayer, type TacticalRevealEvent } from "./TacticalRevealLayer";
+import { FateRouletteOverlay } from "./FateRouletteOverlay";
 
 type MatchSide = MatchState["player"];
 
@@ -24,6 +25,9 @@ type MatchBoardProps = {
   onInvalidDrop: (message: string) => void;
   onEndTurn: () => void;
   onAiTurn: () => void;
+  onRouletteSpin?: (rouletteId: string) => void;
+  onRouletteReveal?: (rouletteId: string) => void;
+  onRouletteConfirm?: (rouletteId: string) => void;
   onRestart: () => void;
   onStartNextBattle: () => void;
   onConcede: () => void;
@@ -108,6 +112,8 @@ function getActionHint(
   if (state.winner) return "Match ended. Restart to play again.";
   if (state.activePlayerId === "enemy") return aiThinking ? "AI turn is resolving automatically." : "Enemy initiative is ready.";
   if (state.phase === "roll") return "Click D20 or press R.";
+  if (state.phase === "roulette") return "Рулетка Судьбы блокирует поле до подтверждения результата.";
+  if (state.activeRouletteEvent === "BLIND_TOP") return "Слепая вершина: играйте закрытую верхнюю карту колоды.";
   if (state.phase !== "main") return "Wait for your main phase.";
 
   if (!selectedCard) return "Drag a card to an empty lower slot.";
@@ -145,6 +151,9 @@ export function MatchBoard({
   onInvalidDrop,
   onEndTurn,
   onAiTurn,
+  onRouletteSpin,
+  onRouletteReveal,
+  onRouletteConfirm,
   onRestart,
   onStartNextBattle,
   onConcede,
@@ -161,7 +170,7 @@ export function MatchBoard({
 }: MatchBoardProps) {
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId);
   const isBetweenBattles = state.phase === "betweenBattles" && !state.winner;
-  const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner;
+  const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner && state.activeRouletteEvent !== "BLIND_TOP";
   const canRoll = state.activePlayerId === "player" && state.phase === "roll" && !state.winner;
   const selectedCardIsPlayable = Boolean(selectedCard && canPlay && state.player.will >= getEffectiveCardCost(state, "player", selectedCard));
   const playerName = getHeroName(state.player, "Brian");
@@ -353,6 +362,16 @@ export function MatchBoard({
             </div>
           </div>
         </section>
+      ) : null}
+
+      {state.rouletteState ? (
+        <FateRouletteOverlay
+          roulette={state.rouletteState}
+          localPlayerId="player"
+          onSpin={onRouletteSpin ?? (() => undefined)}
+          onReveal={onRouletteReveal ?? (() => undefined)}
+          onConfirm={onRouletteConfirm ?? (() => undefined)}
+        />
       ) : null}
 
       {state.winner ? (
