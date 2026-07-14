@@ -2875,3 +2875,167 @@ img {
   font-size: 8px !important;
   line-height: 1;
 }
+
+/* =========================================================
+   HUB ROOM QUICK NAVIGATION
+   ========================================================= */
+
+.hubRoomNav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 15px;
+  background: linear-gradient(180deg, rgba(7, 13, 24, 0.82), rgba(0, 0, 0, 0.24));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.hubRoomNavLabel {
+  padding: 0 7px 0 8px;
+  color: rgba(196, 221, 235, 0.48);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.hubRoomBtn {
+  --room-accent: #7ee9ff;
+  --room-glow: rgba(126, 233, 255, 0.25);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  color: rgba(226, 240, 249, 0.68);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.hubRoomBtn.is-market {
+  --room-accent: #ffc96b;
+  --room-glow: rgba(255, 184, 82, 0.25);
+}
+
+.hubRoomBtn.is-arena {
+  --room-accent: #ff7287;
+  --room-glow: rgba(255, 80, 112, 0.24);
+}
+
+.hubRoomBtn.is-archive {
+  --room-accent: #a998ff;
+  --room-glow: rgba(133, 111, 255, 0.26);
+}
+
+.hubRoomBtn::after {
+  content: "";
+  position: absolute;
+  right: 22%;
+  bottom: -5px;
+  left: 22%;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--room-accent);
+  box-shadow: 0 0 12px var(--room-glow);
+  opacity: 0;
+  transform: scaleX(0.45);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.hubRoomBtn:hover {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--room-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--room-accent) 10%, rgba(10, 14, 25, 0.72));
+  box-shadow: 0 0 18px var(--room-glow);
+  transform: translateY(-1px);
+}
+
+.hubRoomBtn.is-active {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--room-accent) 52%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--room-accent) 19%, rgba(24, 32, 47, 0.86)),
+    color-mix(in srgb, var(--room-accent) 8%, rgba(15, 10, 32, 0.92))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 20px var(--room-glow);
+}
+
+.hubRoomBtn.is-active::after {
+  opacity: 1;
+  transform: scaleX(1);
+}
+
+.hubRoomIcon {
+  position: relative;
+  z-index: 1;
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  fill: currentColor;
+  filter: drop-shadow(0 0 6px var(--room-glow));
+}
+
+.hubRoomIconCut {
+  fill: none;
+  stroke: rgba(3, 8, 15, 0.86);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@media (max-width: 1500px) {
+  .hubRoomNavLabel { display: none; }
+  .hubRoomBtn { padding: 0 9px; }
+}
+
+@media (max-width: 1120px) and (min-width: 981px) {
+  .hubRoomBtn {
+    width: 38px;
+    padding: 0;
+  }
+
+  .hubRoomBtn > span { display: none; }
+}
+
+@media (max-width: 980px) {
+  .hubRoomNav {
+    margin-left: 2px;
+  }
+
+  .hubRoomBtn {
+    width: auto;
+    padding: 0 10px;
+  }
+
+  .hubRoomBtn > span { display: inline; }
+}
+
+@media (max-width: 620px) {
+  .hubRoomBtn {
+    width: 38px;
+    padding: 0;
+  }
+
+  .hubRoomBtn > span { display: none; }
+}

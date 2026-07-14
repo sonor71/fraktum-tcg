@@ -11,6 +11,7 @@ import {
   buildDebugText,
   createMatchDebugStateSummary,
   diffMatchStates,
+  findAppendedLogLines,
   isMatchDebugAllowed,
   makeDebugSession,
   sanitizeDebugValue,
@@ -46,10 +47,9 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
   const [events, setEvents] = useState<MatchDebugEvent[]>([]);
   const [previousSessions, setPreviousSessions] = useState<MatchDebugSession[]>(() => loadMatchDebugSessions());
   const eventsRef = useRef<MatchDebugEvent[]>([]);
-  const startTimeRef = useRef(Date.now());
+  const [startTime] = useState(() => Date.now());
   const sequenceRef = useRef(0);
   const previousStateRef = useRef<MatchState | null>(null);
-  const previousLogCountRef = useRef(0);
   const lastProcessedEngineEventIdRef = useRef(0);
   const saveTimerRef = useRef<number | null>(null);
   const latestSessionRef = useRef<MatchDebugSession | null>(null);
@@ -63,7 +63,7 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
       id: `debug_${input.state.id}_${sequenceRef.current + 1}_${timestamp}`,
       sequence: sequenceRef.current + 1,
       timestamp,
-      elapsedMs: timestamp - startTimeRef.current,
+      elapsedMs: timestamp - startTime,
       matchId: input.state.id,
       matchMode: input.matchMode,
       roomId: input.roomId,
@@ -79,7 +79,7 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
       changes: record.changes,
       metadata: record.metadata ? sanitizeDebugValue(record.metadata) as Record<string, unknown> : undefined,
     };
-  }, [input.matchMode, input.roomId, input.seat, input.state.id]);
+  }, [input.matchMode, input.roomId, input.seat, input.state.id, startTime]);
 
   const record = useCallback((recordInput: MatchDebugRecordInput) => {
     if (!allowed) return;
@@ -102,11 +102,17 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
     roomId: input.roomId,
     seat: input.seat ?? undefined,
     playerNames: input.playerNames,
-    startTime: startTimeRef.current,
+    startTime,
     endTime: input.state.winner ? Date.now() : undefined,
     events: eventList.slice(-MAX_EVENTS),
     finalState: finalState ?? createMatchDebugStateSummary(input.state),
-  }), [input.matchMode, input.playerNames, input.roomId, input.seat, input.state]);
+  }), [input.matchMode, input.playerNames, input.roomId, input.seat, input.state, startTime]);
+
+  const buildSessionRef = useRef(buildSession);
+
+  useEffect(() => {
+    buildSessionRef.current = buildSession;
+  }, [buildSession]);
 
   const persistNow = useCallback((eventList = events) => {
     if (!allowed || eventList.length === 0) return;
@@ -132,9 +138,7 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
   useEffect(() => {
     if (!allowed) return;
     const previous = previousStateRef.current;
-    const previousLogCount = previousLogCountRef.current;
     previousStateRef.current = input.state;
-    previousLogCountRef.current = input.state.log.length;
 
     if (!previous) {
       record({ source: "system", category: "match", actionType: "START_MATCH", message: "Match debug session started.", after: baseSummary });
@@ -142,6 +146,21 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
     }
 
     if (previous === input.state) return;
+
+    const newMatchTransition = previous.id !== input.state.id;
+    if (newMatchTransition) {
+      lastProcessedEngineEventIdRef.current = 0;
+      record({
+        source: "system",
+        category: "match",
+        actionType: "START_MATCH",
+        message: "A fresh match state was created. Debug transition history was reset.",
+        before: createMatchDebugStateSummary(previous),
+        after: baseSummary,
+      });
+      return;
+    }
+
     const resetTransition = isBattleResetTransition(previous, input.state);
     const engineEvents = input.state.structuredEngineEvents ?? [];
     const newEngineEvents = engineEvents.filter((event) => event.id > lastProcessedEngineEventIdRef.current && !(resetTransition && event.type === "BATTLE_STATE_RESET"));
@@ -155,7 +174,7 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
         metadata: event.payload,
       });
     });
-    const newLogLines = resetTransition ? [] : input.state.log.slice(previousLogCount);
+    const newLogLines = resetTransition ? [] : findAppendedLogLines(previous.log, input.state.log);
     const before = createMatchDebugStateSummary(previous);
     const after = createMatchDebugStateSummary(input.state);
     const changes = resetTransition ? [] : diffMatchStates(before, after, undefined, newLogLines);
@@ -207,8 +226,9 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
       }
     }
 
-    newLogLines.forEach((line) => {
-      record({ source: "engine", category: "effect", message: line, metadata: { logIndex: previousLogCount + newLogLines.indexOf(line) } });
+    const firstNewLogIndex = Math.max(0, input.state.log.length - newLogLines.length);
+    newLogLines.forEach((line, index) => {
+      record({ source: "engine", category: "effect", message: line, metadata: { logIndex: firstNewLogIndex + index } });
     });
   }, [allowed, baseSummary, input.state, record]);
 
@@ -269,7 +289,7 @@ export function useMatchDebugRecorder(input: UseMatchDebugRecorderInput) {
     return () => {
       if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
       if (eventsRef.current.length > 0) {
-        saveMatchDebugSession(buildSession(eventsRef.current));
+        saveMatchDebugSession(buildSessionRef.current(eventsRef.current));
       } else {
         const session = latestSessionRef.current;
         if (session) saveMatchDebugSession(session);

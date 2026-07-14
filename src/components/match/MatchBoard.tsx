@@ -1,5 +1,5 @@
 import type { CardInstance, MatchState } from "../../game/core/types";
-import { getEffectiveCardCost } from "../../game/engine/TurnManager";
+import { canPlayCardWithCurrentResources, getEffectiveCardCost } from "../../game/engine/TurnManager";
 import { BattleLog } from "./BattleLog";
 import { BoardSlot } from "./BoardSlot";
 import { D20View } from "./D20View";
@@ -12,7 +12,15 @@ import { MatchFxLayer, type MatchFxEvent } from "./MatchFxLayer";
 import { CardTravelLayer, type CardTravelEvent } from "./CardTravelLayer";
 import type { MatchRewardResult } from "../../useGameStore";
 import { TacticalRevealLayer, type TacticalRevealEvent } from "./TacticalRevealLayer";
+<<<<<<< HEAD
 import { FateRouletteOverlay } from "./FateRouletteOverlay";
+=======
+import {
+  MatchPresentationLayer,
+  type MatchRoulettePresentation,
+  type MatchTurnAnnouncement,
+} from "./MatchPresentationLayer";
+>>>>>>> e6131a6 (Release latest FRAKTUM game update)
 
 type MatchSide = MatchState["player"];
 
@@ -22,6 +30,7 @@ type MatchBoardProps = {
   onSelectCard: (id: string | null) => void;
   onRoll: () => void;
   onPlay: (id: string, slotIndex: number) => void;
+  onPlayTopCard: () => void;
   onInvalidDrop: (message: string) => void;
   onEndTurn: () => void;
   onAiTurn: () => void;
@@ -41,6 +50,10 @@ type MatchBoardProps = {
   matchMode?: "ai" | "online" | string;
   opponentName?: string | null;
   opponentRankLabel?: string | null;
+  turnAnnouncement?: MatchTurnAnnouncement | null;
+  roulettePresentation?: MatchRoulettePresentation | null;
+  interactionLocked?: boolean;
+  onRoulettePresentationComplete?: () => void;
 };
 
 function clampPct(value: number, max: number) {
@@ -108,13 +121,17 @@ function getActionHint(
   state: MatchState,
   selectedCard: CardInstance | undefined,
   aiThinking: boolean,
+  interactionLocked: boolean,
 ) {
   if (state.winner) return "Match ended. Restart to play again.";
+  if (interactionLocked) return "Дождитесь завершения экранного события.";
   if (state.activePlayerId === "enemy") return aiThinking ? "AI turn is resolving automatically." : "Enemy initiative is ready.";
   if (state.phase === "roll") return "Click D20 or press R.";
   if (state.phase === "roulette") return "Рулетка Судьбы блокирует поле до подтверждения результата.";
   if (state.activeRouletteEvent === "BLIND_TOP") return "Слепая вершина: играйте закрытую верхнюю карту колоды.";
   if (state.phase !== "main") return "Wait for your main phase.";
+  if (state.activeRouletteEvent === "BLIND_TOP") return "Blind Top: click your deck to play its top card.";
+  if (state.activeRouletteEvent === "HIDDEN_HAND") return "Hidden Hand: choose and play a face-down card without seeing it.";
 
   if (!selectedCard) return "Drag a card to an empty lower slot.";
 
@@ -148,6 +165,7 @@ export function MatchBoard({
   onSelectCard,
   onRoll,
   onPlay,
+  onPlayTopCard,
   onInvalidDrop,
   onEndTurn,
   onAiTurn,
@@ -167,18 +185,37 @@ export function MatchBoard({
   matchMode = "ai",
   opponentName = null,
   opponentRankLabel = null,
+  turnAnnouncement = null,
+  roulettePresentation = null,
+  interactionLocked = false,
+  onRoulettePresentationComplete = () => undefined,
 }: MatchBoardProps) {
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId);
   const isBetweenBattles = state.phase === "betweenBattles" && !state.winner;
+<<<<<<< HEAD
   const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner && state.activeRouletteEvent !== "BLIND_TOP";
   const canRoll = state.activePlayerId === "player" && state.phase === "roll" && !state.winner;
   const selectedCardIsPlayable = Boolean(selectedCard && canPlay && state.player.will >= getEffectiveCardCost(state, "player", selectedCard));
+=======
+  const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner && !interactionLocked;
+  const canRoll = state.activePlayerId === "player" && state.phase === "roll" && !state.winner && !interactionLocked;
+  const blindTopActive = canPlay && state.activeRouletteEvent === "BLIND_TOP";
+  const hiddenHandActive = state.activeRouletteEvent === "HIDDEN_HAND";
+  const topDeckCard = blindTopActive ? state.player.deck[0] : undefined;
+  const canPlayTopCard = Boolean(topDeckCard && canPlayCardWithCurrentResources(state, "player", topDeckCard));
+  const selectedCardIsPlayable = Boolean(
+    selectedCard &&
+    canPlay &&
+    !blindTopActive &&
+    state.player.will >= getEffectiveCardCost(state, "player", selectedCard),
+  );
+>>>>>>> e6131a6 (Release latest FRAKTUM game update)
   const playerName = getHeroName(state.player, "Brian");
   const isOnlineMode = matchMode === "online";
   const enemyName = isOnlineMode && opponentName?.trim() ? opponentName.trim() : getHeroName(state.enemy, "Felix");
   const enemyRankLabel = isOnlineMode ? (opponentRankLabel?.trim() || "RANK III") : "AI Rank III";
   const readablePhase = getPhaseLabel(state);
-  const actionHint = getActionHint(state, selectedCard, aiThinking);
+  const actionHint = getActionHint(state, selectedCard, aiThinking, interactionLocked);
   const winnerLabel = getWinnerLabel(state.winner, playerName, enemyName);
   const battleResultTitle = state.battleResult === "player" ? "ПОБЕДА" : state.battleResult === "enemy" ? "ПОРАЖЕНИЕ" : "НИЧЬЯ";
   const seriesScore = state.seriesScore ?? { player: 0, enemy: 0 };
@@ -193,6 +230,7 @@ export function MatchBoard({
     aiThinking ? "is-ai-thinking" : "",
     state.winner ? "is-match-ended" : "",
     isBetweenBattles ? "is-between-battles" : "",
+    state.activeRouletteEvent ? `is-roulette-${state.activeRouletteEvent.toLowerCase().replace(/_/g, "-")}` : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -204,6 +242,14 @@ export function MatchBoard({
       aria-busy={aiThinking ? "true" : "false"}
     >
       <div className="matchArenaFrame" aria-hidden="true" />
+
+      <MatchPresentationLayer
+        turnAnnouncement={turnAnnouncement}
+        roulettePresentation={roulettePresentation}
+        opponentName={enemyName}
+        isOnlineMode={isOnlineMode}
+        onRouletteComplete={onRoulettePresentationComplete}
+      />
 
       <div className="matchArenaTopbar">
         <div className="matchTurnBlock">
@@ -218,6 +264,13 @@ export function MatchBoard({
           <strong>{state.lastRoll ?? "—"}</strong>
         </div>
       </div>
+
+      {state.activeRouletteEvent ? (
+        <div className="matchRouletteNotice" role="status" aria-live="polite">
+          <span>FATE ROULETTE</span>
+          <b>{state.activeRouletteEvent.replace(/_/g, " ")}</b>
+        </div>
+      ) : null}
 
       <section className="matchOpponentProfile" aria-label="Opponent profile">
         <div>
@@ -316,7 +369,13 @@ export function MatchBoard({
       </section>
 
       <section className="matchPlayerPiles" aria-label="Player piles">
-        <DeckPile count={state.player.deck.length} owner="player" />
+        <DeckPile
+          count={state.player.deck.length}
+          owner="player"
+          onActivate={blindTopActive ? onPlayTopCard : undefined}
+          disabled={blindTopActive && !canPlayTopCard}
+          actionLabel={blindTopActive ? (canPlayTopCard ? "PLAY TOP" : "TOP BLOCKED") : undefined}
+        />
         <DiscardPile cards={state.player.discard} owner="player" />
       </section>
 
@@ -324,7 +383,8 @@ export function MatchBoard({
         <HandView
           cards={state.player.hand}
           onPlay={onPlay}
-          disabled={!canPlay}
+          disabled={!canPlay || blindTopActive}
+          hidden={hiddenHandActive}
           selectedId={selectedCardId}
           onSelect={onSelectCard}
           onInvalidDrop={onInvalidDrop}

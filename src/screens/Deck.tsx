@@ -3,6 +3,7 @@ import { useMemo, useState, type DragEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGameStore, type OwnedCard } from "../useGameStore";
 import TiltCard from "../components/TiltCard";
+import { FRAKTUM_MAIN_DECK_SIZE, FRAKTUM_MAX_BONUS_CARDS, getDeckCardKind } from "../game/deckRules";
 
 
 type DeckKind = "main" | "character" | "boost";
@@ -37,10 +38,8 @@ const RARITY_SCORE: Record<string, number> = {
 };
 
 function kindOf(card: OwnedCard): DeckKind {
-  const t = (card.type ?? "").toLowerCase();
-  if (t.includes("персонаж") || t.includes("character")) return "character";
-  if (t.includes("бонус") || t.includes("bonus") || t.includes("усилен") || t.includes("boost")) return "boost";
-  return "main";
+  const kind = getDeckCardKind(card.type);
+  return kind === "bonus" ? "boost" : kind;
 }
 
 function rarityScore(card: Card) {
@@ -154,23 +153,23 @@ export default function Deck() {
     [deckCards]
   );
   const boosts = useMemo(
-    () => deckCards.filter((c) => c.kind === "boost").slice(0, 4),
+    () => deckCards.filter((c) => c.kind === "boost").slice(0, FRAKTUM_MAX_BONUS_CARDS),
     [deckCards]
   );
   const mains = useMemo(
-    () => deckCards.filter((c) => c.kind === "main").slice(0, 18),
+    () => deckCards.filter((c) => c.kind === "main").slice(0, FRAKTUM_MAIN_DECK_SIZE),
     [deckCards]
   );
 
   const boostSlots = useMemo<(Card | null)[]>(() => {
-    const arr = Array.from({ length: 4 }).map(() => null as Card | null);
-    for (let i = 0; i < Math.min(4, boosts.length); i++) arr[i] = boosts[i];
+    const arr = Array.from({ length: FRAKTUM_MAX_BONUS_CARDS }).map(() => null as Card | null);
+    for (let i = 0; i < Math.min(FRAKTUM_MAX_BONUS_CARDS, boosts.length); i++) arr[i] = boosts[i];
     return arr;
   }, [boosts]);
 
   const mainSlots = useMemo<(Card | null)[]>(() => {
-    const arr = Array.from({ length: 18 }).map(() => null as Card | null);
-    for (let i = 0; i < Math.min(18, mains.length); i++) arr[i] = mains[i];
+    const arr = Array.from({ length: FRAKTUM_MAIN_DECK_SIZE }).map(() => null as Card | null);
+    for (let i = 0; i < Math.min(FRAKTUM_MAIN_DECK_SIZE, mains.length); i++) arr[i] = mains[i];
     return arr;
   }, [mains]);
 
@@ -333,20 +332,28 @@ export default function Deck() {
 
   function autoBuild() {
     const chars = uniqueByBaseId(pool.filter((c) => c.kind === "character").sort(compareBestCards)).slice(0, 1);
-    const boostsPick = uniqueByBaseId(pool.filter((c) => c.kind === "boost").sort(compareBestCards)).slice(0, 4);
+    const boostsPick = uniqueByBaseId(
+      pool.filter((c) => c.kind === "boost").sort(compareBestCards)
+    ).slice(0, FRAKTUM_MAX_BONUS_CARDS);
 
-    const remainingDeckSpace = Math.max(0, 20 - chars.length - boostsPick.length);
     const mainsPick = uniqueByBaseId(
       pool
         .filter((c) => c.kind === "main")
         .sort(compareBestCards)
-    ).slice(0, Math.min(18, remainingDeckSpace));
+    ).slice(0, FRAKTUM_MAIN_DECK_SIZE);
 
     setDeckIds([...chars, ...boostsPick, ...mainsPick].map((c) => c.id));
   }
 
   function save() {
-    alert("Сохранено (zustand persist).");
+    if (mains.length !== FRAKTUM_MAIN_DECK_SIZE) {
+      alert(`Основная колода должна содержать ровно ${FRAKTUM_MAIN_DECK_SIZE} карт. Сейчас: ${mains.length}.`);
+      return;
+    }
+
+    alert(
+      `Колода сохранена: ${mains.length} основных карт, ${character ? 1 : 0} персонаж, ${boosts.length} усилений.`
+    );
   }
 
   // пул: карты, baseId которых ещё не используется в deckIds.
@@ -395,7 +402,7 @@ export default function Deck() {
         {/* boosts */}
         <div className="deckLeftBlock deckBoostsBlock">
           <div className="deckBoostsGrid">
-            {Array.from({ length: 4 }).map((_, i) => {
+            {Array.from({ length: FRAKTUM_MAX_BONUS_CARDS }).map((_, i) => {
               const key = `boost_${i}` as const;
               const b = boostSlots[i] ?? null;
 

@@ -103,12 +103,15 @@ export function runSimpleAI(state: MatchState): MatchState {
     else if (action.type === "CONFIRM_FATE_ROULETTE_RESULT") next = confirmFateRouletteResult(next, "enemy", action.rouletteId);
     else if (action.type === "PLAY_BLIND_TOP_CARD") next = playBlindTopCard(next, "enemy", action.target);
     else if (action.type === "PLAY_CARD") {
-      const beforeWill = next.enemy.will;
-      const chosen = next.enemy.hand.find((card) => card.instanceId === action.cardInstanceId);
+      const beforePlays = next.currentTurn?.playsUsed ?? 0;
+      const chosen = [...next.enemy.hand, ...(next.enemy.deck[0] ? [next.enemy.deck[0]] : [])]
+        .find((card) => card.instanceId === action.cardInstanceId);
       next = playCard(next, "enemy", action.cardInstanceId, action.target);
-      if (chosen && beforeWill === next.enemy.will && getCardCost(chosen) > 0 && !next.currentTurn?.freeCards) {
-        next = addLog(next, `AI warning: ${getCardTitle(chosen)} did not spend Will correctly.`);
-        return next;
+      const actionAccepted = (next.currentTurn?.playsUsed ?? 0) > beforePlays;
+
+      if (!actionAccepted) {
+        next = addLog(next, `AI warning: ${chosen ? getCardTitle(chosen) : action.cardInstanceId} play was rejected; ending turn safely.`);
+        return endTurn(next, "enemy");
       }
     } else if (action.type === "END_TURN") return endTurn(next, "enemy");
     if (next.phase === "ended" || next.phase === "betweenBattles") return next;

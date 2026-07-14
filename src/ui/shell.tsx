@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useGameStore } from "../useGameStore";
 import type { OwnedCard } from "../game/types";
 import { CloudAutoSync } from "../cloud/CloudAutoSync";
+import { createHubRoomSearch, getHubRoomFromSearch, HUB_QUICK_ROOMS, type HubQuickRoomId } from "../screens/Hub/hubNavigation";
 
 type UtilityPanel = "friends" | "battlePass" | "dailyQuests" | "leaderboard";
 
@@ -63,6 +64,36 @@ function getDeckValue(deckIds: string[], ownedCards: OwnedCard[]) {
     const card = ownedById.get(id);
     return sum + (card ? RARITY_VALUE[String(card.rarity)] ?? 0 : 0);
   }, 0);
+}
+
+
+function HubRoomIcon({ roomId }: { roomId: HubQuickRoomId }) {
+  if (roomId === "market") {
+    return (
+      <svg className="hubRoomIcon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 10.2h16v9.3H4z" />
+        <path d="M3.2 9.9 5.4 4.5h13.2l2.2 5.4c-.45 1.35-1.35 2.03-2.7 2.03-1.23 0-2.13-.53-2.7-1.58-.57 1.05-1.47 1.58-2.7 1.58-1.22 0-2.12-.53-2.7-1.58-.57 1.05-1.47 1.58-2.7 1.58-1.35 0-2.25-.68-2.7-2.03Z" />
+        <path className="hubRoomIconCut" d="M8 19.5v-5.2h4v5.2M14.5 14.3h2.8v2.8h-2.8z" />
+      </svg>
+    );
+  }
+
+  if (roomId === "arena") {
+    return (
+      <svg className="hubRoomIcon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="m7.2 3.2 2.3 2.3-5.2 8.8-1.7.8.8-1.7 8.8-5.2-2.3-2.3Z" />
+        <path d="m16.8 3.2-2.3 2.3 5.2 8.8 1.7.8-.8-1.7-8.8-5.2 2.3-2.3Z" />
+        <path d="M8.8 15.2 12 12l3.2 3.2-3.2 5.6-3.2-5.6Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg className="hubRoomIcon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4.2 4.2h6.6c1.1 0 1.9.35 2.4 1.05.5-.7 1.3-1.05 2.4-1.05h4.2v14.5h-4.6c-.9 0-1.57.3-2 .9-.43-.6-1.1-.9-2-.9h-7V4.2Z" />
+      <path className="hubRoomIconCut" d="M12 5.8v12.8M6.8 8h3.2M6.8 11h3.2M14.2 8h3M14.2 11h3" />
+    </svg>
+  );
 }
 
 function IconMessage() {
@@ -299,7 +330,7 @@ function LeaderboardPanel() {
     return leaderboardRows
       .sort((a, b) => (sortBy === "wins" ? b.wins - a.wins : b.deckValue - a.deckValue))
       .map((row, index) => ({ ...row, place: index + 1 }));
-  }, [deckIds, ownedCards, playerDeckValue, playerName, sortBy, wins]);
+  }, [playerDeckValue, playerName, sortBy, wins]);
 
   return (
     <div className="utilityPanel">
@@ -370,6 +401,8 @@ export default function Shell({ children }: PropsWithChildren) {
   const level = useGameStore((state) => state.level);
   const reducedMotion = useGameStore((state) => state.settings.reducedMotion);
   const isMatchRoute = location.pathname.startsWith("/match/");
+  const isHubRoute = location.pathname === "/";
+  const activeHubRoom = getHubRoomFromSearch(location.search);
   const [activePanel, setActivePanel] = useState<UtilityPanel | null>(null);
 
   const openPanel = (panel: UtilityPanel) => {
@@ -377,7 +410,8 @@ export default function Shell({ children }: PropsWithChildren) {
   };
 
   useEffect(() => {
-    setActivePanel(null);
+    const closePanelTimeout = window.setTimeout(() => setActivePanel(null), 0);
+    return () => window.clearTimeout(closePanelTimeout);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -424,6 +458,29 @@ export default function Shell({ children }: PropsWithChildren) {
                 );
               })}
             </nav>
+
+            {isHubRoute ? (
+              <nav className="hubRoomNav" aria-label="Hub rooms">
+                <span className="hubRoomNavLabel">Rooms</span>
+                {HUB_QUICK_ROOMS.map((room) => {
+                  const isActive = activeHubRoom === room.id;
+
+                  return (
+                    <button
+                      className={`hubRoomBtn is-${room.id} ${isActive ? "is-active" : ""}`}
+                      aria-current={isActive ? "location" : undefined}
+                      key={room.id}
+                      onClick={() => nav({ pathname: "/", search: createHubRoomSearch(room.id) })}
+                      title={room.title}
+                      type="button"
+                    >
+                      <HubRoomIcon roomId={room.id} />
+                      <span>{room.label}</span>
+                    </button>
+                  );
+                })}
+              </nav>
+            ) : null}
 
             <div className="topbarSpacer" />
 

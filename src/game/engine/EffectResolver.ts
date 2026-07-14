@@ -1,16 +1,17 @@
 import type { CardInstance, MatchState, PlayerId, TargetRef } from "../core/types";
-import { rollDie } from "./Random";
+import { rollDie, shuffleWithSeed } from "./Random";
 import { resolveCaduceusBattleDraw } from "./MatchEngine";
 import {
   getCardBoardMaxHp,
   getCardCurrentHp,
+  getCardCost,
   getCardTitle,
   isValidSlotIndex,
   otherPlayer,
   playerLabel,
   slotsKey,
 } from "./TurnManager";
-import { createFateRouletteState } from "./FateRoulette";
+import { FATE_ROULETTE_EVENTS } from "./Rules";
 
 const LOG_LIMIT = 80;
 
@@ -38,8 +39,15 @@ type TacticalRevealEvent = {
   source: string;
   title: string;
   cards: TacticalRevealCard[];
-  createdAt: number;
 };
+
+type MatchStateWithRevealEvents = MatchState & {
+  tacticalRevealEvents?: TacticalRevealEvent[];
+  tacticalRevealSequence?: number;
+};
+
+type MatchNoteKey = "matchSecondsBonus" | "matchSpeedMultiplierBonus";
+type MatchStateWithNotes = MatchState & Partial<Record<MatchNoteKey, number>>;
 
 function log(state: MatchState, message: string): MatchState {
   return { ...state, log: [...state.log, message].slice(-LOG_LIMIT) };
@@ -178,7 +186,7 @@ function makeRevealCard(card: CardInstance): TacticalRevealCard {
     id: card.instanceId,
     title: getCardTitle(card),
     image: getCardImage(card),
-    cost: Math.max(0, Math.floor(safeNumber(definition.cost ?? definition.willCost, 0))),
+    cost: getCardCost(card),
     rarity: typeof definition.rarity === "string" ? definition.rarity : "common",
   };
 }
@@ -187,18 +195,21 @@ function appendRevealEvent(
   state: MatchState,
   event: Omit<TacticalRevealEvent, "id" | "createdAt">,
 ): MatchState {
-  const record = state as unknown as Record<string, unknown>;
-  const previous = Array.isArray(record.tacticalRevealEvents) ? record.tacticalRevealEvents as TacticalRevealEvent[] : [];
+  const revealState = state as MatchStateWithRevealEvents;
+  const previous = revealState.tacticalRevealEvents ?? [];
+  const sequence = (revealState.tacticalRevealSequence ?? 0) + 1;
   const nextEvent: TacticalRevealEvent = {
     ...event,
-    id: `reveal_${state.rngSeed}_${previous.length}`,
-    createdAt: Date.now(),
+    id: `reveal_${state.id}_${sequence}`,
   };
 
-  return {
-    ...(state as any),
+  const nextState: MatchStateWithRevealEvents = {
+    ...state,
+    tacticalRevealSequence: sequence,
     tacticalRevealEvents: [...previous, nextEvent].slice(-12),
-  } as MatchState;
+  };
+
+  return nextState;
 }
 
 function getCardRarityRank(card: CardInstance) {
@@ -334,7 +345,7 @@ function getKnownCardEffects(card: CardInstance): RawEffect[] {
   switch (card.baseId || card.definition.id) {
     case "energy_sword": return [{ op: "damageFront", amount: 3 }, { op: "damageHero", amount: 2, target: "enemyHero" }];
     case "sandstorm": return [{ op: "randomDamage", min: 3, max: 4, target: "enemy" }];
-    case "shadow_sword": return [{ op: "damageFront", amount: 2 }];
+    case "shadow_sword": return [{ op: "damageFront", amount: 2 }, { op: "applyAilment", target: "enemy", amount: 1 }];
     case "magician": return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
     case "elven_sword": return [{ op: "damage", amount: 3, target: "frontEnemy" }];
     case "hunter": return [{ op: "damage", amount: 3, target: "frontEnemy" }];
@@ -342,7 +353,7 @@ function getKnownCardEffects(card: CardInstance): RawEffect[] {
     case "valkyrie": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
     case "thunderer": return [{ op: "damageHero", amount: 4, target: "enemyHero" }, { op: "damageFront", amount: 3 }];
     case "thunderbolts": return [{ op: "randomDamage", min: 2, max: 3, target: "enemy" }];
-    case "warlock": return [{ op: "damageAllEnemySlots", min: 3, max: 4 }, { op: "damageHero", amount: 4, target: "enemyHero" }];
+    case "warlock": return [{ op: "damageAllEnemySlots", min: 3, max: 4 }, { op: "damageHero", amount: 4, target: "enemyHero" }, { op: "applyFriday", target: "enemy" }];
     case "excalibur": return [{ op: "damage", amount: 10, target: "frontEnemy" }, { op: "returnPlayedToDeck" }];
     case "fire": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
     case "ice": return [{ op: "damageFront", amount: 2 }, { op: "damageHero", amount: 1, target: "enemyHero" }];
@@ -401,7 +412,7 @@ function updateSide(state: MatchState, playerId: PlayerId, patch: Partial<MatchS
 }
 
 function setSideEffects(state: MatchState, playerId: PlayerId, effects: RawEffect[]) {
-  return updateSide(state, playerId, { effects: effects as any });
+  return updateSide(state, playerId, { effects: effects as unknown as MatchState[PlayerId]["effects"] });
 }
 
 function getNextPowerModifiers(state: MatchState, playerId: PlayerId) {
@@ -859,13 +870,35 @@ function forceDrawMatch(state: MatchState, sourceName: string): MatchState {
 }
 
 function roulette(state: MatchState, playerId: PlayerId, sourceName: string) {
-  if (state.rouletteState) return log(state, `[ROULETTE] ${sourceName} tried to start roulette while one is already active.`);
-  return createFateRouletteState(state, playerId, 15);
+  const roll = rollDie(state.rngSeed, FATE_ROULETTE_EVENTS.length);
+  const event = FATE_ROULETTE_EVENTS[roll.value - 1];
+  let next: MatchState = {
+    ...state,
+    rngSeed: roll.seed,
+    activeRouletteEvent: event,
+    rouletteOwnerId: playerId,
+    rouletteExpiresBeforeOwnerPersonalTurn: (state[playerId].personalTurnsTaken ?? 0) + 1,
+  };
+
+  if (event === "MERGED_DECKS") {
+    const merged = shuffleWithSeed([...next.player.deck, ...next.enemy.deck], next.rngSeed);
+    const half = Math.ceil(merged.items.length / 2);
+    next = {
+      ...next,
+      rngSeed: merged.seed,
+      player: { ...next.player, deck: merged.items.slice(0, half) },
+      enemy: { ...next.enemy, deck: merged.items.slice(half) },
+    };
+  } else if (event === "WORLD_WITHOUT_WILL") {
+    next = { ...next, currentTurn: next.currentTurn ? { ...next.currentTurn, freeCards: true } : next.currentTurn };
+  }
+
+  return log(next, `[ROULETTE] ${sourceName} resolved official event ${event}.`);
 }
 
 function logKnowledge(state: MatchState, targetPlayerId: PlayerId, sourceName: string) {
   const side = state[targetPlayerId];
-  const costs = side.hand.map((card) => `${getCardTitle(card)}:${Math.max(0, Number(card.definition.cost ?? 0))}`).join(", ") || "empty hand";
+  const costs = side.hand.map((card) => `${getCardTitle(card)}:${getCardCost(card)}`).join(", ") || "empty hand";
   return log(state, `${sourceName} revealed ${playerLabel(targetPlayerId)} Will ${side.will}/${side.maxWill}; hand costs: ${costs}.`);
 }
 
@@ -908,10 +941,10 @@ function revealRandomEnemyCard(state: MatchState, playerId: PlayerId, sourceName
   return log(next, `${sourceName} revealed one random ${fromHand ? "hand" : "deck"} card from ${playerLabel(enemyId)}: ${getCardTitle(revealed)}.`);
 }
 
-function addMatchNote(state: MatchState, key: string, amount: number, sourceName: string) {
-  const record = state as unknown as Record<string, unknown>;
-  const current = Math.max(0, safeNumber(record[key], 0));
-  return log({ ...(state as any), [key]: current + amount } as MatchState, `${sourceName} changed ${key} by +${amount}.`);
+function addMatchNote(state: MatchState, key: MatchNoteKey, amount: number, sourceName: string) {
+  const noteState = state as MatchStateWithNotes;
+  const current = Math.max(0, safeNumber(noteState[key], 0));
+  return log({ ...state, [key]: current + amount }, `${sourceName} changed ${key} by +${amount}.`);
 }
 
 function applyEffect(

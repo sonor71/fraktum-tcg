@@ -166,7 +166,7 @@ export const HUB_MAPS: Record<HubMapId, HubMapConfig> = {
     image: "/assets/hub/market.png",
     width: 1728,
     height: 1024,
-    spawnPoint: { x: 800, y: 200 },
+    spawnPoint: { x: 764.4, y: 98.9 },
     colliders: [
   { id: "collider-1", x: 1104, y: 608, width: 264, height: 51 },
   { id: "collider-2", x: 1077, y: 608, width: 26, height: 55 },
@@ -300,7 +300,7 @@ occlusionZones: [
     image: "/assets/hub/archive.png",
     width: 1024,
     height: 1536,
-    spawnPoint: { x: 550, y: 1300 },
+    spawnPoint: { x: 454, y: 1360 },
     colliders: [
   { id: "collider-12", x: 208, y: 1289, width: 14, height: 29 },
   { id: "collider-13", x: 223, y: 1286, width: 36, height: 15 },
@@ -484,7 +484,7 @@ occlusionZones: [
     image: "/assets/hub/arena.png",
     width: 1024,
     height: 1536,
-    spawnPoint: { x: 1000, y: 606},
+    spawnPoint: { x: 900, y: 620 },
    colliders: [
   { id: "collider-1", x: 676, y: 830, width: 72, height: 152 },
   { id: "collider-2", x: 546, y: 889, width: 75, height: 55 },
@@ -568,6 +568,35 @@ occlusionZones: [
   },
 
 };
+
+export function getHubTransitionSpawnPoint(
+  fromMapId: HubMapId,
+  targetMapId: HubMapId,
+): HubPoint {
+  const directExit = HUB_MAPS[fromMapId].exits.find(
+    (exit): exit is Extract<HubExit, { type: "map-transition" }> =>
+      exit.type === "map-transition" && exit.targetMap === targetMapId,
+  );
+
+  if (directExit) {
+    return { ...directExit.spawnOnTarget };
+  }
+
+  // Fast travel between side rooms should place the player at the same entrance
+  // that is used when walking there from the central hub.
+  if (targetMapId !== "hub1") {
+    const centralHubExit = HUB_MAPS.hub1.exits.find(
+      (exit): exit is Extract<HubExit, { type: "map-transition" }> =>
+        exit.type === "map-transition" && exit.targetMap === targetMapId,
+    );
+
+    if (centralHubExit) {
+      return { ...centralHubExit.spawnOnTarget };
+    }
+  }
+
+  return { ...HUB_MAPS[targetMapId].spawnPoint };
+}
 
 export const HUB_INTERACTION_DISTANCE = 10;
 export const HUB_PLAYER_SPEED = 200;

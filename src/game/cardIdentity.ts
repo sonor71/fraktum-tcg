@@ -395,7 +395,7 @@ export const CARD_IDENTITIES: Record<string, CardIdentity> = {
     ruName: "Безответная любовь",
     enName: "Unrequited Love",
     image: "/cards/INREQUITED LOVE.png",
-    rarity: "легендарная",
+    rarity: "эпическая",
     code: "URL",
     number: 38,
   },

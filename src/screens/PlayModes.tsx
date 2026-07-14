@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { FRAKTUM_MAIN_DECK_SIZE, splitDeckSelection } from "../game/deckRules";
+import { useGameStore } from "../useGameStore";
 
 type Mode = {
   id: string;
@@ -13,9 +15,24 @@ type Mode = {
 
 export default function PlayModes() {
   const nav = useNavigate();
+  const ownedCards = useGameStore((state) => state.ownedCards);
+  const deckIds = useGameStore((state) => state.deckIds);
+  const mainDeckCount = splitDeckSelection(ownedCards, deckIds).mainDeck.length;
 
-  const openAiMatch = () => nav("/match/ai");
-  const openOnlineMatchmaking = () => nav("/match/online");
+  const openMatch = (path: string) => {
+    if (mainDeckCount !== FRAKTUM_MAIN_DECK_SIZE) {
+      window.alert(
+        `Сначала собери ровно ${FRAKTUM_MAIN_DECK_SIZE} основных карт в сцене DECK. Сейчас выбрано: ${mainDeckCount}.`,
+      );
+      nav("/deck");
+      return;
+    }
+
+    nav(path);
+  };
+
+  const openAiMatch = () => openMatch("/match/ai");
+  const openOnlineMatchmaking = () => openMatch("/match/online");
 
   const MODES: Mode[] = [
     {

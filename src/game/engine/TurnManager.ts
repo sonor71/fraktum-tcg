@@ -1,4 +1,5 @@
 import type { CardInstance, MatchState, PlayerId, TargetRef } from "../core/types";
+import { getWillCostByRarity } from "../rarityWillCost";
 
 import { BOARD_SIZE } from "./Rules";
 export { BOARD_SIZE };
@@ -18,9 +19,7 @@ export function getCardTitle(card: CardInstance) {
 }
 
 export function getCardCost(card: CardInstance) {
-  const raw = Number(card.definition.cost ?? 0);
-  if (!Number.isFinite(raw)) return 0;
-  return Math.max(0, Math.floor(raw));
+  return getWillCostByRarity(card.definition.rarity);
 }
 
 export function getCardBoardMaxHp(card: CardInstance) {
@@ -142,9 +141,18 @@ export function canPlayCardWithCurrentResources(state: MatchState, playerId: Pla
   return true;
 }
 
+export function getCardsAvailableToPlay(state: MatchState, playerId: PlayerId) {
+  if (state.activeRouletteEvent === "BLIND_TOP") {
+    const topCard = state[playerId].deck[0];
+    return topCard ? [topCard] : [];
+  }
+
+  return state[playerId].hand;
+}
+
 export function canPlayerMakeAnyMove(state: MatchState, playerId: PlayerId) {
   if (!canPlayerPlayCards(state, playerId)) return false;
-  if (state[playerId].hand.some((card) => canPlayCardWithCurrentResources(state, playerId, card))) return true;
+  if (getCardsAvailableToPlay(state, playerId).some((card) => canPlayCardWithCurrentResources(state, playerId, card))) return true;
 
   const turn = state.currentTurn;
   const canSpendAction = !turn || turn.d20Limit === "unlimited" || turn.playsUsed < turn.d20Limit;
@@ -160,10 +168,11 @@ export function canPlayerMakeAnyMove(state: MatchState, playerId: PlayerId) {
 }
 
 export function getPlayableCards(state: MatchState, playerId: PlayerId) {
-  const side = state[playerId];
   if (!canPlayerPlayCards(state, playerId)) return [];
 
-  return side.hand.filter((card) => canPlayCardWithCurrentResources(state, playerId, card));
+  return getCardsAvailableToPlay(state, playerId).filter((card) =>
+    canPlayCardWithCurrentResources(state, playerId, card),
+  );
 }
 
 export function getPlayableCardScore(card: CardInstance) {

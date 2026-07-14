@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInitialMatchState } from "../engine/MatchEngine";
-import { createMatchDebugStateSummary, diffMatchStates, sanitizeDebugValue } from "../../components/match/debug/matchDebugUtils";
+import { createMatchDebugStateSummary, diffMatchStates, findAppendedLogLines, sanitizeDebugValue } from "../../components/match/debug/matchDebugUtils";
 
 describe("match debug utilities", () => {
   it("summarizes safe public match state without enemy hand contents", () => {
@@ -26,6 +26,14 @@ describe("match debug utilities", () => {
     expect(changes.some((change) => change.message.includes("Turn"))).toBe(true);
     expect(changes.some((change) => change.message.includes("Enemy HP"))).toBe(true);
     expect(changes.some((change) => change.message.includes("Player slot 1"))).toBe(true);
+  });
+
+
+  it("finds appended entries after the bounded engine log drops old lines", () => {
+    const previous = ["line-1", "line-2", "line-3", "line-4"];
+    const next = ["line-3", "line-4", "line-5", "line-6"];
+
+    expect(findAppendedLogLines(previous, next)).toEqual(["line-5", "line-6"]);
   });
 
   it("redacts secret-like keys", () => {

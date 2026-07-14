@@ -128,13 +128,11 @@ function D20Mesh({ rolling, value }: { rolling: boolean; value?: number }) {
 
 export function D20View({ value, onRoll, disabled = false }: D20ViewProps) {
   const [rolling, setRolling] = useState(false);
-  const [displayValue, setDisplayValue] = useState<number | undefined>(clampD20(value));
+  const [rollingValue, setRollingValue] = useState<number | undefined>();
+  const displayValue = rolling ? rollingValue : clampD20(value);
   const tickerRef = useRef<number | null>(null);
   const settleRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!rolling) setDisplayValue(clampD20(value));
-  }, [rolling, value]);
 
   useEffect(() => {
     return () => {
@@ -154,7 +152,7 @@ export function D20View({ value, onRoll, disabled = false }: D20ViewProps) {
 
     tickerRef.current = window.setInterval(() => {
       ticks += 1;
-      setDisplayValue(randomD20());
+      setRollingValue(randomD20());
 
       if (ticks < ROLL_TICKS) return;
 

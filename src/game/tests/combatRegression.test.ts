@@ -125,16 +125,16 @@ describe("combat readiness and strict lanes", () => {
 });
 
 describe("Time of Reckoning", () => {
-  const time = (owner: PlayerId) => inst(def("time_of_reckoning", { title: "Time of Reckoning", type: "tactic", cost: 0, effects: [{ op: "modifyWill", amount: 99, target: "self" }] }), owner);
+  const time = (owner: PlayerId) => inst(def("time_of_reckoning", { title: "Time of Reckoning", type: "tactic", rarity: "chromatic", cost: 6, effects: [{ op: "modifyWill", amount: 99, target: "self" }] }), owner);
 
-  it("AI Time of Reckoning halves player Will and damages player HP without changing AI Will", () => {
+  it("AI Time of Reckoning pays its chromatic cost, halves player Will and damages player HP", () => {
     let state = active(createInitialMatchState({ seed: 201, startingPlayerId: "enemy" }), "enemy");
     const card = time("enemy");
-    state = { ...state, player: { ...state.player, will: 5, hp: 20 }, enemy: { ...state.enemy, will: 3, hand: [card], deck: [] } };
+    state = { ...state, player: { ...state.player, will: 5, hp: 20 }, enemy: { ...state.enemy, will: 10, maxWill: 10, hand: [card], deck: [] } };
 
     const next = playCard(state, "enemy", card.instanceId);
     expect(next.player.will).toBe(2);
-    expect(next.enemy.will).toBe(3);
+    expect(next.enemy.will).toBe(4);
     expect(next.player.hp).toBe(15);
     expect(next.enemy.will).toBeLessThanOrEqual(state.enemy.will);
   });
@@ -142,7 +142,7 @@ describe("Time of Reckoning", () => {
   it("player Time of Reckoning targets enemy, never increases Will, and clamps at zero", () => {
     let state = active(createInitialMatchState({ seed: 202, startingPlayerId: "player" }), "player");
     const card = time("player");
-    state = { ...state, player: { ...state.player, will: 4, hand: [card], deck: [] }, enemy: { ...state.enemy, will: 1, hp: 20 } };
+    state = { ...state, player: { ...state.player, will: 10, maxWill: 10, hand: [card], deck: [] }, enemy: { ...state.enemy, will: 1, hp: 20 } };
 
     const next = playCard(state, "player", card.instanceId);
     expect(next.enemy.will).toBe(0);

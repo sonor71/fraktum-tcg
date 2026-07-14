@@ -1,12 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { CardDefinition, CardInstance, MatchState, PlayerId } from "../core/types";
 import { getBonusPercent, scaleByElementBonus } from "../engine/BonusSystem";
 import { damageHero, resolveFieldCombat } from "../engine/DamageSystem";
 import { drawCards } from "../engine/DrawSystem";
-import { createInitialMatchState, dispatch, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
+import { createInitialMatchState, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
+import { planNextAiAction, runSimpleAI } from "../ai/SimpleAI";
 import { BOARD_SIZE, clampTimerSeconds, getD20PlayLimit } from "../engine/Rules";
-import { FATE_ROULETTE_RESULT_READ_MS } from "../engine/FateRoulette";
-import { planNextAiAction } from "../ai/SimpleAI";
 
 const def = (id: string, partial: Partial<CardDefinition> = {}): CardDefinition => ({
   id,
@@ -35,9 +34,6 @@ function withTurn(state: MatchState, playerId: PlayerId, limit: number | "unlimi
 }
 
 describe("FRAKTUM Match Rules v1.0", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
 
   it("deck starts as 20 unique cards with 7 hand and 13 deck after draw", () => {
     const state = createInitialMatchState({ seed: 11 });
@@ -84,85 +80,64 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(getD20PlayLimit(6)).toBe(6);
     expect(getD20PlayLimit(7)).toBe("unlimited");
   });
-  it("9-11 roulette pauses the turn, then confirm rerolls 15-16 for a limit", () => {
+  it("9-11 roulette triggers per turn and rerolls 15-16 for a limit", () => {
     let state = createInitialMatchState({ seed: 31 });
     state = { ...state, rngSeed: 1198, activePlayerId: "player", phase: "roll" };
-    const triggered = rollD20(state, "player");
-    expect(triggered.phase).toBe("roulette");
-    expect(triggered.rouletteState?.stage).toBe("awaitingSpin");
-    expect(triggered.rouletteState?.event).toBeUndefined();
-    expect(triggered.activeRouletteEvent).toBeUndefined();
-    expect(triggered.lastRoll).toBe(15);
-    expect(triggered.rouletteUsedThisBattle).toBe(true);
+    const next = rollD20(state, "player");
+    expect(next.currentTurn?.rouletteResolvedThisTurn).toBe(true);
+    expect(next.activeRouletteEvent).toBeDefined();
+    expect(next.structuredEngineEvents?.at(-1)).toMatchObject({
+      type: "ROULETTE_STARTED",
+      payload: { event: next.activeRouletteEvent, ownerId: "player" },
+    });
+    expect(next.lastRoll).not.toBe(15);
+    const again = rollD20({ ...next, phase: "roll", rngSeed: 1198 }, "player");
+    expect(next.rouletteUsedThisBattle).toBe(true);
+    expect(again.log.filter((l) => l.includes("[ROULETTE_STARTED]"))).toHaveLength(1);
+  });
+  it("resolves MERGED_DECKS when roulette starts from a D20 roll", () => {
+    const playerDeckCard = inst(def("merge_player"), "player");
+    const enemyDeckCard = inst(def("merge_enemy"), "enemy");
+    let state = createInitialMatchState({ seed: 4, startingPlayerId: "player" });
+    state = {
+      ...state,
+      rngSeed: 1199,
+      activePlayerId: "player",
+      phase: "roll",
+      player: { ...state.player, deck: [playerDeckCard] },
+      enemy: { ...state.enemy, deck: [enemyDeckCard] },
+      rouletteUsedThisBattle: false,
+    };
 
-    const spin = dispatch(triggered, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
-    const duplicateSpin = dispatch(spin, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
-    expect(duplicateSpin.rouletteState?.event).toBe(spin.rouletteState?.event);
+    const next = rollD20(state, "player");
+    const mergedIds = [...next.player.deck, ...next.enemy.deck].map((card) => card.instanceId).sort();
 
-    const revealAt = 1_000;
-    const reveal = dispatch(spin, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id, revealedAtMs: revealAt });
-    expect(reveal.rouletteState?.stage).toBe("result");
-    vi.useFakeTimers();
-    vi.setSystemTime(revealAt + FATE_ROULETTE_RESULT_READ_MS);
-    const confirmed = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
-    expect(confirmed.rouletteState).toBeUndefined();
-    expect(confirmed.currentTurn?.rouletteResolvedThisTurn).toBe(true);
-    expect(confirmed.lastRoll).not.toBe(15);
-    expect(confirmed.phase).toBe("main");
+    expect(next.activeRouletteEvent).toBe("MERGED_DECKS");
+    expect(mergedIds).toEqual([enemyDeckCard.instanceId, playerDeckCard.instanceId].sort());
+    expect(next.log.some((line) => line.includes("[ROULETTE_MERGED_DECKS]"))).toBe(true);
   });
 
-  it("roulette result enforces the 15 second read window before confirm", () => {
-    vi.useFakeTimers();
-    const revealedAtMs = 10_000;
-    let state = createInitialMatchState({ seed: 31 });
-    state = { ...state, rngSeed: 1198, activePlayerId: "player", phase: "roll" };
-    const triggered = rollD20(state, "player");
-    const spin = dispatch(triggered, { type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId: triggered.rouletteState!.id });
-    const reveal = dispatch(spin, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id, revealedAtMs });
+  it("expires a roulette event before its owner's next personal turn", () => {
+    let state = withTurn(createInitialMatchState({ startingPlayerId: "player" }), "player");
+    state = {
+      ...state,
+      activeRouletteEvent: "BLIND_TOP",
+      rouletteOwnerId: "player",
+      rouletteExpiresBeforeOwnerPersonalTurn: 1,
+      rouletteUsedThisBattle: true,
+      player: { ...state.player, personalTurnsTaken: 0 },
+    };
 
-    expect(reveal.rouletteState?.stage).toBe("result");
-    expect(reveal.rouletteState?.resultRevealedAt).toBe(revealedAtMs);
-    expect(reveal.rouletteState?.confirmAvailableAt).toBe(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS);
+    state = endTurn(state, "player");
+    state = endTurn(withTurn(state, "enemy"), "enemy");
+    const next = rollD20({ ...state, rngSeed: 1 }, "player");
 
-    vi.setSystemTime(revealedAtMs + 1_000);
-    const blockedAfterOneSecond = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
-    expect(blockedAfterOneSecond.rouletteState).toBeDefined();
-    expect(blockedAfterOneSecond.lastRoll).toBe(15);
-    expect(blockedAfterOneSecond.structuredEngineEvents?.at(-1)?.type).toBe("ROULETTE_RESULT_CONFIRM_BLOCKED");
-
-    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS - 1);
-    const blockedAt14999 = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
-    expect(blockedAt14999.rouletteState).toBeDefined();
-    expect(blockedAt14999.phase).toBe("roulette");
-
-    const repeatedReveal = dispatch(reveal, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id, revealedAtMs: revealedAtMs + 99_999 });
-    expect(repeatedReveal.rouletteState?.confirmAvailableAt).toBe(reveal.rouletteState?.confirmAvailableAt);
-
-    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS);
-    const confirmed = dispatch(reveal, { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId: triggered.rouletteState!.id });
-    expect(confirmed.rouletteState).toBeUndefined();
-    expect(confirmed.phase).toBe("main");
-    expect(confirmed.structuredEngineEvents?.some((event) => event.type === "ROULETTE_RESULT_CONFIRMED" && Number(event.payload?.visibleDurationMs) >= FATE_ROULETTE_RESULT_READ_MS)).toBe(true);
-  });
-
-  it("AI waits for roulette result read window before confirming", () => {
-    vi.useFakeTimers();
-    const revealedAtMs = 50_000;
-    let state = createInitialMatchState({ seed: 31, startingPlayerId: "enemy" });
-    state = { ...state, rngSeed: 1198, activePlayerId: "enemy", phase: "enemy" };
-    const triggered = rollD20(state, "enemy");
-    const spin = dispatch(triggered, { type: "SPIN_FATE_ROULETTE", playerId: "enemy", rouletteId: triggered.rouletteState!.id });
-    const reveal = dispatch(spin, { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: triggered.rouletteState!.id, revealedAtMs });
-
-    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS - 1);
-    expect(planNextAiAction(reveal)).toBeNull();
-
-    vi.setSystemTime(revealedAtMs + FATE_ROULETTE_RESULT_READ_MS);
-    expect(planNextAiAction(reveal)).toEqual({ type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: triggered.rouletteState!.id });
+    expect(next.activeRouletteEvent).toBeUndefined();
+    expect(next.log.some((line) => line.includes("[ROULETTE_END] BLIND_TOP"))).toBe(true);
   });
 
   it("12 D20=20 makes cards free for current turn", () => {
-    const card = inst(def("free", { cost: 5 }), "player");
+    const card = inst(def("free", { rarity: "legendary", cost: 5 }), "player");
     let state = withTurn(createInitialMatchState(), "player");
     state = { ...state, player: { ...state.player, will: 0, hand: [card] }, lastRoll: 20, currentTurn: { ...state.currentTurn!, freeCards: true } };
     const played = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
@@ -212,15 +187,26 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(next.board.playerSlots[0]).toBeNull();
     expect(next.player.discard).toContain(unit);
   });
-  it("23-25 fatigue applies only with empty hand and deck", () => {
-    let state = withTurn(createInitialMatchState(), "player");
-    expect(endTurn(state, "player").player.hp).toBe(state.player.hp - 3);
-    state = { ...state, player: { ...state.player, hand: [], deck: [] } };
-    expect(endTurn(state, "player").player.hp).toBe(state.player.hp - 3);
-    const card = inst(def("p"), "player");
-    state = { ...state, player: { ...state.player, will: 5, hand: [card], deck: [] } };
-    const played = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
-    expect(endTurn(played, "player").player.hp).toBe(played.player.hp);
+  it("23-25 fatigue applies only when both hand and deck are empty", () => {
+    const base = withTurn(createInitialMatchState(), "player");
+
+    expect(endTurn(base, "player").player.hp).toBe(base.player.hp);
+
+    const emptyHand = { ...base, player: { ...base.player, hand: [] } };
+    expect(endTurn(emptyHand, "player").player.hp).toBe(emptyHand.player.hp);
+
+    const emptyDeck = { ...base, player: { ...base.player, deck: [] } };
+    expect(endTurn(emptyDeck, "player").player.hp).toBe(emptyDeck.player.hp);
+
+    const exhausted = { ...base, player: { ...base.player, hand: [], deck: [] } };
+    const afterFatigue = endTurn(exhausted, "player");
+    expect(afterFatigue.player.hp).toBe(exhausted.player.hp - 3);
+    expect(afterFatigue.log.some((line) => line.includes("Deck exhaustion"))).toBe(true);
+
+    const lastCard = inst(def("last_card"), "player");
+    const lastCardState = { ...base, player: { ...base.player, will: 5, hand: [lastCard], deck: [] } };
+    const played = playCard(lastCardState, "player", lastCard.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
+    expect(endTurn(played, "player").player.hp).toBe(played.player.hp - 3);
   });
   it("26-28 periodic/sequence damage can end as draw and HP clamps to zero", () => {
     const p = damageHero({ ...createInitialMatchState().player, hp: 2 }, 5).player;
@@ -248,7 +234,7 @@ describe("FRAKTUM Match Rules v1.0", () => {
     expect(scaleByElementBonus(def("tactic", { type: "tactic", scalableFields: ["damage"] }), "damage", 5, pct)).toBe(5);
   });
   it("37-38 current enemy Will can be hidden while played costs are public", () => {
-    const card = inst(def("costly", { cost: 4 }), "enemy");
+    const card = inst(def("costly", { rarity: "mythic", cost: 4 }), "enemy");
     let state = withTurn(createInitialMatchState(), "enemy");
     state = { ...state, enemy: { ...state.enemy, will: 5, hand: [card] } };
     const played = playCard(state, "enemy", card.instanceId, { type: "slot", playerId: "enemy", slotIndex: 0 });
@@ -266,5 +252,46 @@ describe("FRAKTUM Match Rules v1.0", () => {
     const next = playCard(state, "player", card.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
     expect(next.player.hand).toContain(card);
     expect(next.log.at(-1)).toContain("[BLIND_TOP]");
+  });
+
+  it("plays only the deck top while BLIND_TOP is active", () => {
+    const topCard = inst(def("blind_top", { cost: 1, health: 3 }), "player");
+    const handCard = inst(def("blind_hand", { cost: 1, health: 3 }), "player");
+    let state = withTurn(createInitialMatchState(), "player");
+    state = {
+      ...state,
+      activeRouletteEvent: "BLIND_TOP",
+      player: { ...state.player, will: 5, hand: [handCard], deck: [topCard] },
+    };
+
+    const next = playCard(state, "player", topCard.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
+
+    expect(next.player.deck).toHaveLength(0);
+    expect(next.player.hand).toEqual([handCard]);
+    expect(next.board.playerSlots[0]?.instanceId).toBe(topCard.instanceId);
+    expect(next.log.some((line) => line.includes("from the top of the deck"))).toBe(true);
+  });
+
+  it("AI uses the deck top during BLIND_TOP and completes its turn", () => {
+    const topCard = inst(def("ai_blind_top", { cost: 1, health: 3 }), "enemy");
+    const handCard = inst(def("ai_blind_hand", { cost: 1, health: 3 }), "enemy");
+    let state = withTurn(createInitialMatchState({ startingPlayerId: "enemy" }), "enemy");
+    state = {
+      ...state,
+      activeRouletteEvent: "BLIND_TOP",
+      enemy: { ...state.enemy, will: 5, hand: [handCard], deck: [topCard] },
+    };
+
+    expect(planNextAiAction(state)).toMatchObject({
+      type: "PLAY_CARD",
+      cardInstanceId: topCard.instanceId,
+    });
+
+    const next = runSimpleAI(state);
+    expect(next.enemy.deck).toHaveLength(0);
+    expect(next.enemy.hand).toEqual([handCard]);
+    expect(next.board.enemySlots.some((card) => card?.instanceId === topCard.instanceId)).toBe(true);
+    expect(next.activePlayerId).toBe("player");
+    expect(next.phase).toBe("roll");
   });
 });

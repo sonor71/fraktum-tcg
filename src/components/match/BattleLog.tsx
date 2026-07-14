@@ -160,7 +160,7 @@ function makeStableKey(entry: string, absoluteIndex: number) {
 
 export function BattleLog({ entries, maxEntries = 12 }: BattleLogProps) {
   const listRef = useRef<HTMLOListElement>(null);
-  const safeEntries = Array.isArray(entries) ? entries : [];
+  const safeEntries = useMemo(() => (Array.isArray(entries) ? entries : []), [entries]);
   const safeMaxEntries = Math.max(4, Math.min(12, maxEntries));
 
   const visible = useMemo(() => {

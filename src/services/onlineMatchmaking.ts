@@ -7,6 +7,7 @@ import {
 } from "./supabaseClient";
 import type { CardDefinition } from "../game/core/types";
 import type { WillMatchStats } from "../useGameStore";
+import { FRAKTUM_MAIN_DECK_SIZE } from "../game/deckRules";
 
 export type OnlineSeat = "a" | "b";
 
@@ -17,6 +18,8 @@ export type OnlinePlayerSnapshot = {
   level?: number;
   deck: CardDefinition[];
   deckSize: number;
+  hero?: CardDefinition;
+  bonusCards?: CardDefinition[];
   willStats: WillMatchStats;
   createdAt: string;
 };
@@ -164,7 +167,9 @@ export function isRoomReady(room: OnlineMatchRoom) {
       room.player_a_user_id &&
       room.player_b_user_id &&
       room.player_a_ready &&
-      room.player_b_ready,
+      room.player_b_ready &&
+      room.player_a_snapshot.deck?.length === FRAKTUM_MAIN_DECK_SIZE &&
+      room.player_b_snapshot.deck?.length === FRAKTUM_MAIN_DECK_SIZE,
   );
 }
 

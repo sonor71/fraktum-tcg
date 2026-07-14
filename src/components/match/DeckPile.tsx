@@ -3,6 +3,9 @@ type PileOwner = "player" | "enemy";
 type DeckPileProps = {
   count: number;
   owner: PileOwner;
+  onActivate?: () => void;
+  disabled?: boolean;
+  actionLabel?: string;
 };
 
 const CARD_BACK_IMAGE = "/cards/card-back.png";
@@ -23,12 +26,15 @@ function getDeckState(count: number) {
   return "full";
 }
 
-export function DeckPile({ count, owner }: DeckPileProps) {
+export function DeckPile({ count, owner, onActivate, disabled = false, actionLabel }: DeckPileProps) {
   const safeCount = clampCount(count);
   const ownerLabel = getOwnerLabel(owner);
   const state = getDeckState(safeCount);
   const isEmpty = state === "empty";
   const title = `${ownerLabel} deck: ${safeCount} card${safeCount === 1 ? "" : "s"}. State: ${state}.`;
+
+  const interactive = Boolean(onActivate) && !disabled && !isEmpty;
+  const accessibleTitle = actionLabel ? `${title} ${actionLabel}.` : title;
 
   return (
     <div
@@ -37,10 +43,21 @@ export function DeckPile({ count, owner }: DeckPileProps) {
         "is-deck",
         `is-${owner}`,
         isEmpty ? "is-empty" : "",
+        onActivate ? "is-interactive" : "",
+        disabled ? "is-disabled" : "",
       ].filter(Boolean).join(" ")}
-      role="group"
-      aria-label={title}
-      title={title}
+      role={onActivate ? "button" : "group"}
+      tabIndex={interactive ? 0 : undefined}
+      aria-disabled={onActivate ? !interactive : undefined}
+      aria-label={accessibleTitle}
+      title={accessibleTitle}
+      onClick={interactive ? onActivate : undefined}
+      onKeyDown={interactive ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onActivate?.();
+        }
+      } : undefined}
       data-owner={owner}
       data-count={safeCount}
       data-state={state}
@@ -64,7 +81,7 @@ export function DeckPile({ count, owner }: DeckPileProps) {
       </span>
 
       <span className="matchPileText" aria-hidden="true">
-        <b>DECK</b>
+        <b>{actionLabel ?? "DECK"}</b>
       </span>
 
       <span className="matchPileCount" aria-hidden="true">

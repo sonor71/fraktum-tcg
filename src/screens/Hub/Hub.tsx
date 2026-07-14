@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import PlayerSprite from "./PlayerSprite";
 import { useHubPresence } from "../../services/hubPresence";
 import { useGameStore } from "../../useGameStore";
 import "./hub.css";
 import {
   HUB_MAPS,
+  getHubTransitionSpawnPoint,
   type HubCollider,
   type HubExit,
   type HubMapId,
@@ -13,6 +14,7 @@ import {
   type HubPoint,
 } from "./hubMaps";
 import { getPlayerCollisionRect, HUB_CAMERA_ZOOM, useHubMovement } from "./useHubMovement";
+import { createHubRoomSearch, getHubRoomFromSearch } from "./hubNavigation";
 
 const TRANSITION_MS = 420;
 const MIN_ZONE_SIZE = 4;
@@ -92,14 +94,19 @@ function getNextZoneId(prefix: string, zones: { id: string }[]) {
 }
 
 export default function Hub() {
+  const location = useLocation();
   const navigate = useNavigate();
+  const initialMapId = getHubRoomFromSearch(location.search);
   const mapLayerRef = useRef<HTMLDivElement | null>(null);
+  const transitionTimeoutRef = useRef<number | null>(null);
+  const transitionFinishTimeoutRef = useRef<number | null>(null);
+  const transitionTargetRef = useRef<HubMapId | null>(null);
   const playerName = useGameStore((state) => state.playerName);
   const avatar = useGameStore((state) => state.avatar);
   const level = useGameStore((state) => state.level);
-  const [currentMapId, setCurrentMapId] = useState<HubMapId>("hub1");
-  const [spawnPoint, setSpawnPoint] = useState<HubPoint>(HUB_MAPS.hub1.spawnPoint);
-  const [mapDimensions, setMapDimensions] = useState({ width: HUB_MAPS.hub1.width, height: HUB_MAPS.hub1.height });
+  const [currentMapId, setCurrentMapId] = useState<HubMapId>(initialMapId);
+  const [spawnPoint, setSpawnPoint] = useState<HubPoint>(HUB_MAPS[initialMapId].spawnPoint);
+  const [mapDimensions, setMapDimensions] = useState({ width: HUB_MAPS[initialMapId].width, height: HUB_MAPS[initialMapId].height });
   const [debugMode, setDebugMode] = useState(false);
   const [editorEnabled, setEditorEnabled] = useState(false);
   const [editorModeType, setEditorModeType] = useState<EditorModeType>("collider");
@@ -180,17 +187,49 @@ export default function Hub() {
   }, [mapDimensions.height, mapDimensions.width]);
 
   const enterMap = useCallback((targetMap: HubMapId, point: HubPoint) => {
+    if (transitionTimeoutRef.current !== null) {
+      window.clearTimeout(transitionTimeoutRef.current);
+    }
+    if (transitionFinishTimeoutRef.current !== null) {
+      window.clearTimeout(transitionFinishTimeoutRef.current);
+    }
+
+    transitionTargetRef.current = targetMap;
     setIsTransitioning(true);
     setSelectedZone(null);
     setDraftZone(null);
-    window.setTimeout(() => {
+
+    transitionTimeoutRef.current = window.setTimeout(() => {
       setCurrentMapId(targetMap);
       setSpawnPoint(point);
       setMapDimensions({ width: HUB_MAPS[targetMap].width, height: HUB_MAPS[targetMap].height });
       resetPosition(point);
-      window.setTimeout(() => setIsTransitioning(false), TRANSITION_MS / 2);
+      
+
+      transitionFinishTimeoutRef.current = window.setTimeout(() => {
+        transitionTargetRef.current = null;
+        setIsTransitioning(false);
+      }, TRANSITION_MS / 2);
     }, TRANSITION_MS);
   }, [resetPosition]);
+
+  useEffect(() => {
+    const requestedMapId = getHubRoomFromSearch(location.search);
+    if (requestedMapId === currentMapId || transitionTargetRef.current === requestedMapId) return;
+
+    const requestTimeout = window.setTimeout(() => {
+      enterMap(requestedMapId, getHubTransitionSpawnPoint(currentMapId, requestedMapId));
+    }, 0);
+
+    return () => window.clearTimeout(requestTimeout);
+  }, [currentMapId, enterMap, location.search]);
+
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current !== null) window.clearTimeout(transitionTimeoutRef.current);
+      if (transitionFinishTimeoutRef.current !== null) window.clearTimeout(transitionFinishTimeoutRef.current);
+    };
+  }, []);
 
   const activateExit = useCallback((exit: HubExit | undefined) => {
     if (!exit || isTransitioning) return;
@@ -200,8 +239,11 @@ export default function Hub() {
       return;
     }
 
-    enterMap(exit.targetMap, exit.spawnOnTarget);
-  }, [enterMap, isTransitioning, navigate]);
+    navigate({
+  pathname: "/",
+  search: createHubRoomSearch(exit.targetMap),
+});
+}, [isTransitioning, navigate]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -252,8 +294,11 @@ export default function Hub() {
         return;
       }
       if (key === "e") {
-        activateExit(nearbyExit);
-      }
+  if (event.repeat) return;
+
+  event.preventDefault();
+  activateExit(nearbyExit);
+}
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -348,15 +393,6 @@ export default function Hub() {
     );
   }
 
-  function goToHub() {
-    if (currentMapId === "hub1") return;
-    enterMap("hub1", HUB_MAPS.hub1.spawnPoint);
-  }
-
-  function quickMap(target: HubMapId) {
-    enterMap(target, HUB_MAPS[target].spawnPoint);
-  }
-
   return (
     <section className={`hubWorld ${debugMode ? "is-debug" : ""} ${editorEnabled ? "is-hub-zone-editing" : ""}`}>
       <div className="hubWorldTopOverlay">
@@ -365,14 +401,6 @@ export default function Hub() {
           <strong>{currentMap.title}</strong>
           {debugMode ? <small>x:{Math.round(position.x)} y:{Math.round(position.y)}</small> : null}
         </div>
-        <nav className="hubQuickNav" aria-label="Hub quick navigation">
-          <button type="button" onClick={goToHub}>Hub</button>
-          <button type="button" onClick={() => navigate("/collection")}>Collection</button>
-          <button type="button" onClick={() => navigate("/deck")}>Deck</button>
-          <button type="button" onClick={() => quickMap("market")}>Shop</button>
-          <button type="button" onClick={() => navigate("/profile")}>Profile</button>
-          <button type="button" onClick={() => navigate("/settings")}>Settings</button>
-        </nav>
       </div>
 
       <div className="hubViewport" ref={viewportRef}>

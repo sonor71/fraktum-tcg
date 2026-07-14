@@ -1,18 +1,21 @@
 import { CARDS } from "../cards";
 import type { CardDefinition as CatalogCardDefinition } from "../types";
 import type { CardDefinition } from "../core/types";
+import { getWillCostByRarity } from "../rarityWillCost";
 
 function toEngineCardDefinition(card: CatalogCardDefinition): CardDefinition {
   const bonusEffects = card.type === "bonus" ? [{ op: "bonus", percent: 10 }] : undefined;
   const hasBoardHp = Math.max(0, Math.floor(Number(card.health ?? 0))) > 0;
+
+  const willCost = getWillCostByRarity(card.rarity);
 
   return {
     id: card.id,
     title: card.title,
     type: card.type,
     rarity: card.rarity,
-    cost: card.cost,
-    willCost: card.cost,
+    cost: willCost,
+    willCost,
     attack: card.attack,
     health: card.health,
     hp: card.health,
@@ -37,18 +40,30 @@ export function loadCardDefinitions() {
 
 export function normalizeCardDefinition(input: Partial<CardDefinition> & { id?: string; title?: string; name?: string; image?: string }): CardDefinition {
   const existing = input.id ? getCardDefinition(input.id) : undefined;
-  if (existing) return { ...existing, ...input, id: existing.id, title: input.title ?? input.name ?? existing.title };
+  if (existing) {
+    const merged = {
+      ...existing,
+      ...input,
+      id: existing.id,
+      title: input.title ?? input.name ?? existing.title,
+    };
+    const willCost = getWillCostByRarity(merged.rarity);
+    return { ...merged, cost: willCost, willCost };
+  }
 
   const title = input.title ?? input.name ?? input.id ?? "Card";
   const health = Math.max(0, Math.floor(Number(input.health ?? input.hp ?? 0)) || 0);
+  const rarity = input.rarity ?? "common";
+  const willCost = getWillCostByRarity(rarity);
 
   return {
+    ...input,
     id: input.id ?? title.toLowerCase().replaceAll(" ", "_"),
     title,
     type: input.type ?? "effect",
-    rarity: input.rarity ?? "common",
-    cost: Math.max(0, Math.floor(Number(input.cost ?? input.willCost ?? 1)) || 0),
-    willCost: Math.max(0, Math.floor(Number(input.willCost ?? input.cost ?? 1)) || 0),
+    rarity,
+    cost: willCost,
+    willCost,
     attack: Math.max(0, Math.floor(Number(input.attack ?? 0)) || 0),
     health,
     hp: health,
@@ -57,7 +72,6 @@ export function normalizeCardDefinition(input: Partial<CardDefinition> & { id?: 
     effectKey: input.effectKey,
     requiresBoardSlot: input.requiresBoardSlot ?? true,
     leavesAtTurnEnd: input.leavesAtTurnEnd ?? health <= 0,
-    ...input,
   };
 }
 

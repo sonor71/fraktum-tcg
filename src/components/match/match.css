@@ -4067,3 +4067,407 @@ button { -webkit-tap-highlight-color: transparent; }
     display: none;
   }
 }
+
+/* Roulette interaction states */
+.matchPile.is-interactive {
+  cursor: pointer;
+  outline: none;
+  animation: matchBlindTopPulse 1.35s ease-in-out infinite;
+}
+
+.matchPile.is-interactive:hover,
+.matchPile.is-interactive:focus-visible {
+  transform: translateY(-7px) scale(1.035);
+  box-shadow: 0 0 34px rgba(215, 163, 72, .42);
+}
+
+.matchPile.is-disabled {
+  cursor: not-allowed;
+  opacity: .54;
+  animation: none;
+}
+
+.matchPile.is-interactive .matchPileText b {
+  color: #fff0b8;
+  text-shadow: 0 0 12px rgba(255, 193, 82, .72);
+}
+
+.matchRouletteNotice {
+  position: absolute;
+  z-index: 32;
+  top: clamp(68px, 8.2vh, 98px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 250px;
+  justify-content: center;
+  padding: 7px 16px;
+  border: 1px solid rgba(222, 172, 75, .58);
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(20, 8, 31, .90), rgba(77, 22, 71, .84), rgba(20, 8, 31, .90));
+  box-shadow: 0 0 28px rgba(187, 75, 186, .24), inset 0 0 18px rgba(255, 201, 93, .08);
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+}
+
+.matchRouletteNotice span {
+  color: rgba(255, 224, 156, .66);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+
+.matchRouletteNotice b {
+  color: #fff3cf;
+  font-size: 11px;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+}
+
+.matchCardView.is-face-down .matchCardImage {
+  filter: saturate(.72) brightness(.82);
+}
+
+.matchCardView.is-face-down::after {
+  content: "HIDDEN";
+  position: absolute;
+  z-index: 9;
+  left: 50%;
+  bottom: 8%;
+  transform: translateX(-50%);
+  color: rgba(255, 236, 197, .78);
+  font-size: 8px;
+  font-weight: 950;
+  letter-spacing: .13em;
+  text-shadow: 0 1px 4px #000;
+}
+
+@keyframes matchBlindTopPulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(215, 163, 72, .18); }
+  50% { box-shadow: 0 0 34px rgba(215, 163, 72, .46); }
+}
+
+/* Match turn announcements and synchronized Fate Roulette presentation */
+.matchPresentationOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 84;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  pointer-events: all;
+  isolation: isolate;
+}
+
+.matchPresentationBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(95, 48, 135, .20), transparent 45%),
+    rgba(2, 3, 8, .50);
+  backdrop-filter: blur(3px) saturate(.75);
+  animation: matchPresentationBackdropIn .24s ease-out both;
+}
+
+.matchTurnAnnouncementCard {
+  position: relative;
+  min-width: min(620px, 72vw);
+  padding: 22px 48px 24px;
+  text-align: center;
+  border-top: 1px solid rgba(255, 224, 158, .70);
+  border-bottom: 1px solid rgba(255, 224, 158, .70);
+  background: linear-gradient(90deg, transparent, rgba(13, 8, 22, .94) 15%, rgba(37, 20, 55, .96) 50%, rgba(13, 8, 22, .94) 85%, transparent);
+  box-shadow: 0 0 70px rgba(0, 0, 0, .58), 0 0 34px rgba(147, 83, 217, .17);
+  animation: matchTurnAnnouncementIn 1.4s cubic-bezier(.19,.84,.25,1) both;
+}
+
+.matchPresentationOverlay.is-enemy .matchTurnAnnouncementCard {
+  border-color: rgba(216, 84, 98, .72);
+  background: linear-gradient(90deg, transparent, rgba(19, 7, 13, .94) 15%, rgba(67, 17, 28, .95) 50%, rgba(19, 7, 13, .94) 85%, transparent);
+  box-shadow: 0 0 70px rgba(0, 0, 0, .58), 0 0 34px rgba(205, 49, 72, .18);
+}
+
+.matchTurnAnnouncementCard span,
+.matchPresentationKicker {
+  display: block;
+  color: rgba(255, 231, 184, .68);
+  font-size: clamp(9px, .72cqw, 13px);
+  font-weight: 900;
+  letter-spacing: .24em;
+  text-transform: uppercase;
+}
+
+.matchTurnAnnouncementCard h2 {
+  margin: 7px 0 4px;
+  color: #fff7e8;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 3.8cqw, 64px);
+  line-height: .95;
+  letter-spacing: .08em;
+  text-shadow: 0 0 24px rgba(238, 191, 105, .38), 0 4px 20px rgba(0,0,0,.82);
+}
+
+.matchPresentationOverlay.is-enemy .matchTurnAnnouncementCard h2 {
+  color: #ffe6e8;
+  text-shadow: 0 0 24px rgba(229, 74, 99, .34), 0 4px 20px rgba(0,0,0,.82);
+}
+
+.matchTurnAnnouncementCard i {
+  display: block;
+  width: 92px;
+  height: 2px;
+  margin: 11px auto 0;
+  background: linear-gradient(90deg, transparent, #f1bf69, transparent);
+  box-shadow: 0 0 13px rgba(241, 191, 105, .65);
+}
+
+.matchPresentationOverlay.is-enemy .matchTurnAnnouncementCard i {
+  background: linear-gradient(90deg, transparent, #e05a6c, transparent);
+  box-shadow: 0 0 13px rgba(224, 90, 108, .65);
+}
+
+.matchRoulettePresentationCard {
+  position: relative;
+  width: min(690px, 86vw);
+  min-height: min(650px, 82vh);
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  padding: 28px 34px 30px;
+  text-align: center;
+  border: 1px solid rgba(230, 181, 89, .52);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(126, 49, 154, .31), transparent 42%),
+    linear-gradient(160deg, rgba(12, 6, 22, .98), rgba(39, 12, 50, .97) 54%, rgba(8, 5, 15, .98));
+  box-shadow:
+    0 40px 110px rgba(0,0,0,.72),
+    0 0 70px rgba(151, 56, 180, .23),
+    inset 0 1px 0 rgba(255,255,255,.08),
+    inset 0 0 42px rgba(231, 177, 75, .05);
+  overflow: hidden;
+  animation: matchRouletteCardIn .42s cubic-bezier(.17,.8,.24,1) both;
+}
+
+.matchRoulettePresentationCard::before,
+.matchRoulettePresentationCard::after {
+  content: "";
+  position: absolute;
+  width: 320px;
+  height: 1px;
+  top: 84px;
+  background: linear-gradient(90deg, transparent, rgba(239, 192, 101, .54), transparent);
+}
+
+.matchRoulettePresentationCard::before { left: -90px; transform: rotate(18deg); }
+.matchRoulettePresentationCard::after { right: -90px; transform: rotate(-18deg); }
+
+.matchRoulettePresentationCard h2 {
+  margin: 8px 0 18px;
+  color: #fff2cf;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(34px, 4.4cqw, 72px);
+  line-height: .95;
+  letter-spacing: .075em;
+  text-shadow: 0 0 32px rgba(225, 167, 67, .33), 0 5px 20px rgba(0,0,0,.85);
+}
+
+.matchRouletteSigil {
+  width: clamp(150px, 16cqw, 250px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  margin: 22px auto 34px;
+  border: 2px solid rgba(239, 192, 101, .72);
+  border-radius: 50%;
+  color: #f7d58c;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(70px, 8cqw, 128px);
+  background:
+    radial-gradient(circle, rgba(124, 44, 143, .52), rgba(18, 7, 29, .88) 60%),
+    conic-gradient(from 20deg, transparent, rgba(237, 179, 71, .22), transparent 28%, rgba(146, 61, 176, .25), transparent 58%, rgba(237, 179, 71, .22), transparent);
+  box-shadow: 0 0 45px rgba(171, 68, 196, .34), inset 0 0 30px rgba(239, 192, 101, .14);
+  animation: matchRouletteSigilPulse .85s ease-in-out infinite alternate;
+}
+
+.matchRouletteStage {
+  position: relative;
+  width: clamp(270px, 29cqw, 430px);
+  aspect-ratio: 1;
+  margin: 2px auto 20px;
+  filter: drop-shadow(0 24px 30px rgba(0,0,0,.52));
+}
+
+.matchRoulettePointer {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: -9px;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 15px solid transparent;
+  border-right: 15px solid transparent;
+  border-top: 32px solid #ffd983;
+  filter: drop-shadow(0 0 9px rgba(255, 209, 117, .72));
+}
+
+.matchRouletteWheel {
+  position: absolute;
+  inset: 18px;
+  border: 5px solid rgba(239, 192, 101, .86);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(14, 8, 24, 1) 0 19%, transparent 19.5%),
+    conic-gradient(
+      from -36deg,
+      #5d1f75 0 20%,
+      #872a4d 20% 40%,
+      #8a5a1d 40% 60%,
+      #25446f 60% 80%,
+      #284f45 80% 100%
+    );
+  box-shadow:
+    0 0 42px rgba(164, 62, 190, .36),
+    inset 0 0 36px rgba(0,0,0,.56),
+    inset 0 0 0 9px rgba(12, 7, 20, .52);
+  transform: rotate(0deg);
+}
+
+.matchPresentationOverlay.is-spinning .matchRouletteWheel {
+  animation: matchRouletteSpin 2.25s cubic-bezier(.12,.62,.13,1) forwards;
+}
+
+.matchPresentationOverlay.is-result .matchRouletteWheel {
+  transform: rotate(var(--match-roulette-target-angle));
+}
+
+.matchRouletteWheel::before,
+.matchRouletteWheel::after {
+  content: "";
+  position: absolute;
+  inset: 11%;
+  border: 1px solid rgba(255, 230, 177, .30);
+  border-radius: 50%;
+}
+
+.matchRouletteWheel::after {
+  inset: 43%;
+  border: 2px solid rgba(239, 192, 101, .78);
+  background: radial-gradient(circle, #2b1338, #0a0710 72%);
+  box-shadow: 0 0 19px rgba(235, 183, 86, .28);
+}
+
+.matchRouletteWheel > i {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #f6d28a;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 3cqw, 48px);
+  font-style: normal;
+  text-shadow: 0 0 16px rgba(242, 195, 103, .58);
+}
+
+.matchRouletteWheelLabel {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  width: 84px;
+  margin-left: -42px;
+  margin-top: -8px;
+  color: rgba(255, 244, 218, .91);
+  font-size: clamp(7px, .58cqw, 10px);
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-shadow: 0 2px 5px #000;
+}
+
+.matchRouletteWheelLabel.is-0 { transform: rotate(0deg) translateY(-39%) translateY(-128px) rotate(0deg); }
+.matchRouletteWheelLabel.is-1 { transform: rotate(72deg) translateY(-39%) translateY(-128px) rotate(-72deg); }
+.matchRouletteWheelLabel.is-2 { transform: rotate(144deg) translateY(-39%) translateY(-128px) rotate(-144deg); }
+.matchRouletteWheelLabel.is-3 { transform: rotate(216deg) translateY(-39%) translateY(-128px) rotate(-216deg); }
+.matchRouletteWheelLabel.is-4 { transform: rotate(288deg) translateY(-39%) translateY(-128px) rotate(-288deg); }
+
+.matchRouletteResult {
+  min-height: 92px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(12px) scale(.97);
+  transition: opacity .34s ease, transform .34s ease;
+}
+
+.matchRouletteResult.is-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.matchRouletteResult span {
+  color: rgba(255, 224, 158, .62);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.matchRouletteResult strong {
+  color: #fff0c9;
+  font-size: clamp(18px, 1.65cqw, 28px);
+  letter-spacing: .08em;
+  text-shadow: 0 0 18px rgba(233, 177, 76, .35);
+}
+
+.matchRouletteResult p {
+  max-width: 510px;
+  margin: 3px auto 0;
+  color: rgba(231, 220, 238, .78);
+  font-size: clamp(10px, .72cqw, 13px);
+  line-height: 1.4;
+}
+
+@keyframes matchPresentationBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes matchTurnAnnouncementIn {
+  0% { opacity: 0; transform: translateX(-8%) scaleX(.74); filter: blur(8px); }
+  20% { opacity: 1; transform: translateX(0) scaleX(1); filter: blur(0); }
+  76% { opacity: 1; transform: translateX(0) scaleX(1); filter: blur(0); }
+  100% { opacity: 0; transform: translateX(8%) scaleX(.82); filter: blur(5px); }
+}
+
+@keyframes matchRouletteCardIn {
+  from { opacity: 0; transform: scale(.88) translateY(22px); filter: blur(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+}
+
+@keyframes matchRouletteSigilPulse {
+  from { transform: scale(.97) rotate(-2deg); }
+  to { transform: scale(1.025) rotate(2deg); }
+}
+
+@keyframes matchRouletteSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(var(--match-roulette-target-angle)); }
+}
+
+@media (max-width: 900px) {
+  .matchRoulettePresentationCard {
+    min-height: 74vh;
+    padding: 24px 18px;
+  }
+
+  .matchRouletteWheelLabel.is-0 { transform: rotate(0deg) translateY(-39%) translateY(-94px) rotate(0deg); }
+  .matchRouletteWheelLabel.is-1 { transform: rotate(72deg) translateY(-39%) translateY(-94px) rotate(-72deg); }
+  .matchRouletteWheelLabel.is-2 { transform: rotate(144deg) translateY(-39%) translateY(-94px) rotate(-144deg); }
+  .matchRouletteWheelLabel.is-3 { transform: rotate(216deg) translateY(-39%) translateY(-94px) rotate(-216deg); }
+  .matchRouletteWheelLabel.is-4 { transform: rotate(288deg) translateY(-39%) translateY(-94px) rotate(-288deg); }
+}

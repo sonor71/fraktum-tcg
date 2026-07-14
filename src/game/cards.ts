@@ -5,6 +5,7 @@ import {
   type CardRarity,
   type CardType,
 } from "./types";
+import { getWillCostByRarity } from "./rarityWillCost";
 
 export const RARITIES = CARD_RARITIES;
 export type GameRarity = CardRarity;
@@ -79,6 +80,14 @@ function parseCard(value: unknown, index: number): CardDefinition {
 
   const description = requireString(raw.description, "description", index);
   const image = requireString(raw.image, "image", index);
+  const sourceCost = requireNumber(raw.cost, "cost", index);
+  const expectedCost = getWillCostByRarity(rarity);
+
+  if (sourceCost !== expectedCost) {
+    throw new Error(
+      `[FRAKTUM] cards.json: card "${id}" has cost ${sourceCost}, but rarity "${rarity}" must cost ${expectedCost} Will.`,
+    );
+  }
 
   return {
     id,
@@ -86,7 +95,7 @@ function parseCard(value: unknown, index: number): CardDefinition {
     name: title,
     type,
     rarity,
-    cost: requireNumber(raw.cost, "cost", index),
+    cost: expectedCost,
     attack: requireNumber(raw.attack, "attack", index),
     health: requireNumber(raw.health, "health", index),
     description,

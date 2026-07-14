@@ -13,7 +13,7 @@ export function getBonusPercent(cards: CardInstance[], hero?: CardInstance) {
   return Math.min(ELEMENT_BONUS_CAP * 100, cards.reduce((sum, card) => {
     if (heroElement && card.definition.element && card.definition.element !== heroElement) return sum;
     return sum + ((readPercent(card.definition.effects?.find((e) => e.op === "bonus")?.percent) || extractPercent(card.definition.description) || 0) * 100);
-  }, readPercent((hero?.definition as any)?.elementBonusPercent ?? 0) * 100));
+  }, readPercent((hero?.definition as CardDefinition & { elementBonusPercent?: number } | undefined)?.elementBonusPercent ?? 0) * 100));
 }
 
 export function canScaleField(definition: CardDefinition, field: ScalableField) {

@@ -40,8 +40,6 @@ const HUB_BROADCAST_SEND_MS = 90;
 const HUB_HEARTBEAT_MS = 4000;
 const HUB_MAP_IDS: HubMapId[] = ["hub1", "market", "archive", "arena"];
 
-let runtimeClientId: string | null = null;
-
 function createRuntimeId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -50,10 +48,8 @@ function createRuntimeId() {
   return `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-function getRuntimeHubClientId() {
-  if (!runtimeClientId) runtimeClientId = `hub_${createRuntimeId()}`;
-  return runtimeClientId;
-}
+const RUNTIME_HUB_CLIENT_ID = `hub_${createRuntimeId()}`;
+const RUNTIME_HUB_JOINED_AT = Date.now();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -136,8 +132,8 @@ export function useHubPresence({
   direction,
   isMoving,
 }: HubPresenceInput) {
-  const clientId = useMemo(getRuntimeHubClientId, []);
-  const joinedAtRef = useRef(Date.now());
+  const clientId = RUNTIME_HUB_CLIENT_ID;
+  const presenceAvailable = isSupabaseConfigured() && Boolean(supabase);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const subscribedRef = useRef(false);
   const latestPayloadRef = useRef<HubPlayerPayload | null>(null);
@@ -146,9 +142,11 @@ export function useHubPresence({
   const heartbeatTimerRef = useRef<number | null>(null);
 
   const [presenceStatus, setPresenceStatus] = useState<HubPresenceStatus>(
-    isSupabaseConfigured() && supabase ? "connecting" : "disabled",
+    presenceAvailable ? "connecting" : "disabled",
   );
-  const [presenceError, setPresenceError] = useState<string | null>(null);
+  const [presenceError, setPresenceError] = useState<string | null>(
+    presenceAvailable ? null : "Supabase environment variables are not configured.",
+  );
   const [allRemotePlayers, setAllRemotePlayers] = useState<RemoteHubPlayer[]>([]);
 
   const payloadBase = useMemo<Omit<HubPlayerPayload, "updatedAt">>(
@@ -164,7 +162,7 @@ export function useHubPresence({
       y: Math.round(position.y * 10) / 10,
       direction,
       isMoving,
-      joinedAt: joinedAtRef.current,
+      joinedAt: RUNTIME_HUB_JOINED_AT,
     }),
     [
       avatar,
@@ -184,24 +182,17 @@ export function useHubPresence({
   }, [payloadBase]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured() || !supabase) {
-      setPresenceStatus("disabled");
-      setPresenceError("Supabase environment variables are not configured.");
-      setAllRemotePlayers([]);
-      return undefined;
-    }
+    if (!presenceAvailable || !supabase) return undefined;
 
     const client = supabase;
     let disposed = false;
 
     subscribedRef.current = false;
-    setPresenceStatus("connecting");
-    setPresenceError(null);
 
     const channel = client.channel(HUB_CHANNEL, {
       config: {
         presence: { key: clientId },
-        broadcast: { self: false, ack: true },
+        broadcast: { self: false, ack: false },
       },
     });
 
@@ -230,7 +221,15 @@ export function useHubPresence({
 
     const sendLatestBroadcast = async () => {
       const payload = latestPayloadRef.current;
-      if (!payload || disposed || !subscribedRef.current) return;
+      if (
+        !payload ||
+        disposed ||
+        !subscribedRef.current ||
+        channelRef.current !== channel ||
+        channel.state !== "joined"
+      ) {
+        return;
+      }
 
       const result = await channel.send({
         type: "broadcast",
@@ -294,13 +293,17 @@ export function useHubPresence({
 
           mergePresenceState();
 
+          if (heartbeatTimerRef.current !== null) {
+            window.clearInterval(heartbeatTimerRef.current);
+          }
+
           heartbeatTimerRef.current = window.setInterval(() => {
             void sendLatestBroadcast();
           }, HUB_HEARTBEAT_MS);
           return;
         }
 
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
           subscribedRef.current = false;
           setPresenceStatus("error");
           setPresenceError(`Supabase Hub channel status: ${status}`);
@@ -327,7 +330,7 @@ export function useHubPresence({
       void channel.untrack().catch(() => undefined);
       void client.removeChannel(channel);
     };
-  }, [clientId]);
+  }, [clientId, presenceAvailable]);
 
   // Presence is for membership. Re-track only when identity or map changes.
   useEffect(() => {
@@ -349,7 +352,14 @@ export function useHubPresence({
       pendingBroadcastTimerRef.current = null;
 
       const latest = latestPayloadRef.current;
-      if (!latest || !subscribedRef.current) return;
+      if (
+        !latest ||
+        !subscribedRef.current ||
+        channelRef.current !== channel ||
+        channel.state !== "joined"
+      ) {
+        return;
+      }
 
       lastBroadcastAtRef.current = Date.now();
       const result = await channel.send({

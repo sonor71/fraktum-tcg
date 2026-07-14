@@ -8,6 +8,7 @@ type HandViewProps = {
   cards: CardInstance[];
   onPlay: (id: string, slotIndex: number) => void;
   disabled?: boolean;
+  hidden?: boolean;
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
   onInvalidDrop?: (message: string) => void;
@@ -120,6 +121,7 @@ export function HandView({
   cards,
   onPlay,
   disabled = false,
+  hidden = false,
   selectedId,
   onSelect,
   onInvalidDrop,
@@ -261,7 +263,7 @@ export function HandView({
             onMouseLeave={() => !drag && onSelect?.(null)}
             onPointerDown={(event) => startDrag(event, card)}
           >
-            <CardView card={card} disabled={disabled} selected={selected && !dragging} />
+            <CardView card={card} disabled={disabled} selected={selected && !dragging} faceDown={hidden} />
           </div>
         );
       })}
@@ -277,7 +279,7 @@ export function HandView({
                 height: drag.height,
               }}
             >
-              <CardView card={dragCard} selected dragging />
+              <CardView card={dragCard} selected dragging faceDown={hidden} />
             </div>,
             document.body,
           )

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "lint:match": "eslint src/game src/components/match",
     "preview": "vite preview",
     "test": "vitest --run || node scripts/test-game.mjs"
   },

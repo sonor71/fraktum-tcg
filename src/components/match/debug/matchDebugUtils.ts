@@ -120,9 +120,26 @@ function collectZones(summary: MatchDebugStateSummary, side: PlayerId) {
   return result;
 }
 
+export function findAppendedLogLines(previousLines: string[], nextLines: string[]) {
+  const maxOverlap = Math.min(previousLines.length, nextLines.length);
+
+  for (let overlap = maxOverlap; overlap >= 0; overlap -= 1) {
+    let matches = true;
+    for (let index = 0; index < overlap; index += 1) {
+      if (previousLines[previousLines.length - overlap + index] !== nextLines[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return nextLines.slice(overlap);
+  }
+
+  return [...nextLines];
+}
+
 function detectActionOrLogSource(before: MatchDebugStateSummary, after: MatchDebugStateSummary, actionType?: string, newLogLines: string[] = []) {
   if (actionType) return true;
-  if (newLogLines.some((line) => /(damage|dealt|played|effect|attack|heal|fell|skip penalty|dmg)/i.test(line))) return true;
+  if (newLogLines.some((line) => /(damage|dealt|played|effect|attack|heal|fell|penalty|exhaustion|dmg)/i.test(line))) return true;
   const boardHadAttacker = [...before.player.slots, ...before.enemy.slots].some((slot) => (slot.card?.currentHp ?? 0) > 0);
   return boardHadAttacker && before.phase !== after.phase;
 }
@@ -152,7 +169,14 @@ export function diffMatchStates(
     compareNumber(changes, `${label} HP`, after[side].hp > before[side].hp ? "heal" : "damage", before[side].hp, after[side].hp, `${side}.hp`);
     compareNumber(changes, `${label} Shield`, "will", before[side].shield, after[side].shield, `${side}.shield`);
     compareNumber(changes, `${label} Will`, "will", before[side].will, after[side].will, `${side}.will`);
-    compareNumber(changes, `${label} hand`, "draw", before[side].handCount, after[side].handCount, `${side}.handCount`);
+    compareNumber(
+      changes,
+      `${label} hand`,
+      after[side].handCount > before[side].handCount ? "draw" : "card",
+      before[side].handCount,
+      after[side].handCount,
+      `${side}.handCount`,
+    );
     compareNumber(changes, `${label} deck`, "draw", before[side].deckCount, after[side].deckCount, `${side}.deckCount`);
     compareNumber(changes, `${label} discard`, "discard", before[side].discardCount, after[side].discardCount, `${side}.discardCount`);
 
@@ -188,6 +212,7 @@ export function diffMatchStates(
     beforeZones.forEach((zone, instanceId) => {
       const nextZone = afterZones.get(instanceId);
       if (!nextZone) {
+        if (side === "enemy") return;
         pushChange(changes, {
           category: "card",
           level: "warning",

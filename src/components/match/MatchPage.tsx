@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import type { GameAction } from "../../game/core/GameAction";
 import type { CardDefinition, CardInstance, StartMatchPayload } from "../../game/core/types";
+import { getWillCostByRarity } from "../../game/rarityWillCost";
+import { FRAKTUM_MAIN_DECK_SIZE, splitDeckSelection } from "../../game/deckRules";
 import { createInitialMatchState, dispatch } from "../../game/engine/MatchEngine";
 import { planNextAiAction } from "../../game/ai/SimpleAI";
-import { getFateRouletteConfirmRemainingMs } from "../../game/engine/FateRoulette";
-import { canPlayerMakeAnyMove, cardRequiresBoardSlot, getEffectiveCardCost } from "../../game/engine/TurnManager";
+import { canPlayerMakeAnyMove, cardRequiresBoardSlot, getEffectiveCardCost, getPreferredFreeSlotIndex } from "../../game/engine/TurnManager";
 import { MatchBoard } from "./MatchBoard";
 import { MatchDebugConsole } from "./debug/MatchDebugConsole";
 import { useMatchDebugRecorder } from "./debug/useMatchDebugRecorder";
@@ -22,6 +23,7 @@ import {
 import type { MatchFxEvent } from "./MatchFxLayer";
 import type { CardTravelEvent } from "./CardTravelLayer";
 import type { TacticalRevealEvent } from "./TacticalRevealLayer";
+import type { MatchRoulettePresentation, MatchTurnAnnouncement } from "./MatchPresentationLayer";
 import {
   cancelOnlineMatchmaking,
   fetchOnlineMatchRoom,
@@ -51,12 +53,12 @@ type OnlineQueueState = "idle" | "searching" | "matched" | "error";
 const UI_LOG_LIMIT = 18;
 const PLAY_COMMIT_DELAY_MS = 90;
 const AUTO_AI_DELAY_MS = 720;
-const AUTO_AI_ROULETTE_CONFIRM_DELAY_MS = 480;
 const FX_EVENT_TTL_MS = 920;
 const TRAVEL_EVENT_TTL_MS = 760;
 const TACTICAL_REVEAL_TTL_MS = 3200;
 const AUTO_PLAYER_PASS_EMPTY_MS = 860;
 const FX_LOG_LIMIT = 18;
+const TURN_ANNOUNCEMENT_MS = 1400;
 
 function getOutcomeFromWinner(winner: MatchStateSnapshot["winner"]): MatchOutcome | null {
   if (winner === "player") return "win";
@@ -169,9 +171,23 @@ function validatePlay(matchState: MatchStateSnapshot, cardInstanceId: string, sl
     return "Roll D20 before playing cards.";
   }
 
-  const card = matchState.player.hand.find((candidate) => candidate.instanceId === cardInstanceId);
+  const blindTopActive = matchState.activeRouletteEvent === "BLIND_TOP";
+  const topDeckCard = blindTopActive ? matchState.player.deck[0] : undefined;
+  const card = blindTopActive
+    ? topDeckCard?.instanceId === cardInstanceId
+      ? topDeckCard
+      : undefined
+    : matchState.player.hand.find((candidate) => candidate.instanceId === cardInstanceId);
+
   if (!card) {
+    if (blindTopActive && !topDeckCard) return "Blind Top is active, but your deck is empty.";
+    if (blindTopActive) return "Blind Top allows only the current top card of your deck.";
     return "Selected card is no longer in your hand.";
+  }
+
+  const turn = matchState.currentTurn;
+  if (turn?.playerId === "player" && turn.d20Limit !== "unlimited" && turn.playsUsed >= turn.d20Limit) {
+    return "The D20 card-play limit has been reached.";
   }
 
   if (cardRequiresBoardSlot(card)) {
@@ -338,7 +354,8 @@ function ownedCardToMatchDefinition(card: OwnedCard): CardDefinition {
   const title = readOwnedCardText(card, ["title", "ruTitle", "name"], baseId);
   const image = readOwnedCardText(card, ["frontSrc", "image", "imageUrl", "src", "path"], "/cards/card-back.png");
   const type = normalizeMatchCardType(record.type);
-  const cost = Math.max(0, Math.floor(safeNumber(record.cost ?? record.willCost, 0)));
+  const rarity = readOwnedCardText(card, ["rarity"], "common");
+  const cost = getWillCostByRarity(rarity);
   const attack = Math.max(0, Math.floor(safeNumber(record.attack, 0)));
   const health = Math.max(0, Math.floor(safeNumber(record.health, 0)));
 
@@ -348,7 +365,7 @@ function ownedCardToMatchDefinition(card: OwnedCard): CardDefinition {
     ruTitle: title,
     name: title,
     type,
-    rarity: readOwnedCardText(card, ["rarity"], "common"),
+    rarity,
     cost,
     willCost: cost,
     attack,
@@ -368,21 +385,32 @@ function ownedCardToMatchDefinition(card: OwnedCard): CardDefinition {
   } as unknown as CardDefinition;
 }
 
-function buildPlayerDeckForMatch(ownedCards: OwnedCard[], deckIds: string[]) {
-  const ownedByInstanceId = new Map(ownedCards.map((card) => [card.instanceId, card]));
-  const usedBaseIds = new Set<string>();
+type MatchDeckLoadout = {
+  mainDeck: CardDefinition[];
+  hero?: CardDefinition;
+  bonusCards: CardDefinition[];
+  mainDeckCount: number;
+  isReady: boolean;
+};
 
-  const deck = deckIds
-    .map((deckId) => ownedByInstanceId.get(deckId))
-    .filter((card): card is OwnedCard => Boolean(card))
-    .filter((card) => {
-      if (usedBaseIds.has(card.baseId)) return false;
-      usedBaseIds.add(card.baseId);
-      return true;
-    })
-    .map(ownedCardToMatchDefinition);
+function buildPlayerLoadoutForMatch(
+  ownedCards: OwnedCard[],
+  deckIds: string[],
+): MatchDeckLoadout {
+  const selection = splitDeckSelection(ownedCards, deckIds);
+  const mainDeck = selection.mainDeck.map(ownedCardToMatchDefinition);
+  const hero = selection.character
+    ? ownedCardToMatchDefinition(selection.character)
+    : undefined;
+  const bonusCards = selection.bonusCards.map(ownedCardToMatchDefinition);
 
-  return deck.length === 20 ? deck : [];
+  return {
+    mainDeck,
+    hero,
+    bonusCards,
+    mainDeckCount: mainDeck.length,
+    isReady: mainDeck.length === FRAKTUM_MAIN_DECK_SIZE,
+  };
 }
 
 function buildMatchPayloadFromDeck(
@@ -391,12 +419,23 @@ function buildMatchPayloadFromDeck(
   willStats: WillMatchStats,
   seed = Date.now(),
 ): StartMatchPayload {
-  const playerDeck = buildPlayerDeckForMatch(ownedCards, deckIds);
-  const payload = playerDeck.length === 20
-    ? { seed, playerDeck, playerWillStats: willStats }
-    : { seed, playerWillStats: willStats, deckError: "A FRAKTUM match requires a 20-card unique deck." };
+  const loadout = buildPlayerLoadoutForMatch(ownedCards, deckIds);
 
-  return payload as unknown as StartMatchPayload;
+  if (!loadout.isReady) {
+    return {
+      seed,
+      playerWillStats: willStats,
+      deckError: `A FRAKTUM match requires exactly ${FRAKTUM_MAIN_DECK_SIZE} unique main-deck cards.`,
+    };
+  }
+
+  return {
+    seed,
+    playerDeck: loadout.mainDeck,
+    playerHero: loadout.hero,
+    playerBonusCards: loadout.bonusCards,
+    playerWillStats: willStats,
+  };
 }
 
 function buildOnlinePlayerSnapshot(
@@ -407,14 +446,16 @@ function buildOnlinePlayerSnapshot(
   level: number,
   avatar?: string,
 ): OnlinePlayerSnapshot {
-  const deck = buildPlayerDeckForMatch(ownedCards, deckIds);
+  const loadout = buildPlayerLoadoutForMatch(ownedCards, deckIds);
 
   return {
     playerName: playerName || "FRAKTUM Player",
     avatar,
     level,
-    deck,
-    deckSize: deck.length,
+    deck: loadout.mainDeck,
+    deckSize: loadout.mainDeckCount,
+    hero: loadout.hero,
+    bonusCards: loadout.bonusCards,
     willStats,
     createdAt: new Date().toISOString(),
   };
@@ -430,11 +471,21 @@ function buildMatchPayloadFromOnlineRoom(
 
   return {
     seed: Number(room.seed || Date.now()),
-    playerDeck: own?.deck && own.deck.length === 20 ? own.deck : undefined,
-    enemyDeck: opponent?.deck && opponent.deck.length === 20 ? opponent.deck : undefined,
+    playerDeck:
+      own?.deck && own.deck.length === FRAKTUM_MAIN_DECK_SIZE
+        ? own.deck
+        : undefined,
+    enemyDeck:
+      opponent?.deck && opponent.deck.length === FRAKTUM_MAIN_DECK_SIZE
+        ? opponent.deck
+        : undefined,
+    playerHero: own?.hero,
+    enemyHero: opponent?.hero,
+    playerBonusCards: own?.bonusCards ?? [],
+    enemyBonusCards: opponent?.bonusCards ?? [],
     playerWillStats: own?.willStats ?? fallbackWillStats,
     enemyWillStats: opponent?.willStats ?? fallbackWillStats,
-  } as unknown as StartMatchPayload;
+  };
 }
 
 function matchReducer(current: MatchStateSnapshot, action: GameAction) {
@@ -502,6 +553,10 @@ export default function MatchPage() {
   const playerName = useGameStore((store) => store.playerName);
   const avatar = useGameStore((store) => store.avatar);
   const level = useGameStore((store) => store.level);
+  const currentDeckLoadout = useMemo(
+    () => buildPlayerLoadoutForMatch(ownedCards, deckIds),
+    [deckIds, ownedCards],
+  );
   const initialMatchPayload = useMemo(
     () => buildMatchPayloadFromDeck(ownedCards, deckIds, getWillStatsFromUpgrades(willUpgrades)),
     // The match must use the deck snapshot that existed when the page opened.
@@ -520,6 +575,8 @@ export default function MatchPage() {
   const [onlineQueueMessage, setOnlineQueueMessage] = useState("Online mode is ready. Start matchmaking when you are ready.");
   const [onlineRoom, setOnlineRoom] = useState<OnlineMatchRoom | null>(null);
   const [onlineSeat, setOnlineSeat] = useState<OnlineSeat | null>(null);
+  const [turnAnnouncement, setTurnAnnouncement] = useState<MatchTurnAnnouncement | null>(null);
+  const [roulettePresentation, setRoulettePresentation] = useState<MatchRoulettePresentation | null>(null);
   const [state, send] = useReducer(
     matchReducer,
     initialMatchPayload,
@@ -546,6 +603,11 @@ export default function MatchPage() {
   const processedOnlineActionIds = useRef<Set<string>>(new Set());
   const onlineSeatRef = useRef<OnlineSeat | null>(null);
   const startedOnlineRoomId = useRef<string | null>(null);
+  const aiActionGuardRef = useRef<{ fingerprint: string; repeats: number } | null>(null);
+  const turnAnnouncementTimer = useRef<number | null>(null);
+  const lastTurnAnnouncementKey = useRef<string | null>(null);
+  const lastPresentedRouletteEventId = useRef(0);
+  const presentationMatchId = useRef(state.id);
 
   const opponentUi = useMemo(() => {
     const snapshot = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
@@ -556,6 +618,8 @@ export default function MatchPage() {
     };
   }, [isOnlineMode, onlineRoom, onlineSeat]);
 
+  const interactionLocked = Boolean(turnAnnouncement || roulettePresentation);
+
   const debugRecorder = useMatchDebugRecorder({
     enabled: true,
     state,
@@ -565,6 +629,84 @@ export default function MatchPage() {
     playerNames: { player: playerName || "Player", enemy: opponentUi.name ?? "AI" },
   });
   const recordDebug = debugRecorder.record;
+
+  useEffect(() => {
+    if (presentationMatchId.current !== state.id) {
+      presentationMatchId.current = state.id;
+      lastTurnAnnouncementKey.current = null;
+      lastPresentedRouletteEventId.current = 0;
+      clearTimer(turnAnnouncementTimer);
+      setTurnAnnouncement(null);
+      setRoulettePresentation(null);
+    }
+  }, [state.id]);
+
+  useEffect(() => {
+    if (state.winner || state.phase === "betweenBattles" || state.phase === "ended") {
+      clearTimer(turnAnnouncementTimer);
+      setTurnAnnouncement(null);
+      return;
+    }
+
+    const isPlayerTurnStart = state.activePlayerId === "player" && state.phase === "roll";
+    const isEnemyTurnStart = state.activePlayerId === "enemy" && state.phase === "enemy" && !state.currentTurn;
+    if (!isPlayerTurnStart && !isEnemyTurnStart) return;
+
+    const announcementKey = [
+      state.id,
+      state.battleNumber ?? 1,
+      state.turn,
+      state.activePlayerId,
+    ].join(":");
+
+    if (lastTurnAnnouncementKey.current === announcementKey) return;
+    lastTurnAnnouncementKey.current = announcementKey;
+
+    const enemyTitle = isOnlineMode
+      ? `ХОД ${(opponentUi.name?.trim() || "СОПЕРНИКА").toUpperCase()}`
+      : "ХОД ИИ";
+
+    clearTimer(turnAnnouncementTimer);
+    setTurnAnnouncement({
+      id: announcementKey,
+      title: isPlayerTurnStart ? "ВАШ ХОД" : enemyTitle,
+      subtitle: isPlayerTurnStart ? "ИНИЦИАТИВА ПЕРЕШЛА К ВАМ" : "ИНИЦИАТИВА ПЕРЕШЛА К ПРОТИВНИКУ",
+      side: state.activePlayerId,
+    });
+
+    turnAnnouncementTimer.current = window.setTimeout(() => {
+      turnAnnouncementTimer.current = null;
+      setTurnAnnouncement(null);
+    }, TURN_ANNOUNCEMENT_MS);
+  }, [isOnlineMode, opponentUi.name, state.activePlayerId, state.battleNumber, state.currentTurn, state.id, state.phase, state.turn, state.winner]);
+
+  useEffect(() => {
+    const latestRouletteEvent = [...(state.structuredEngineEvents ?? [])]
+      .reverse()
+      .find((event) => event.type === "ROULETTE_STARTED");
+
+    if (!latestRouletteEvent || latestRouletteEvent.id <= lastPresentedRouletteEventId.current) return;
+
+    const eventName = typeof latestRouletteEvent.payload?.event === "string"
+      ? latestRouletteEvent.payload.event
+      : state.activeRouletteEvent;
+    const ownerId = latestRouletteEvent.payload?.ownerId === "enemy" ? "enemy" : "player";
+
+    lastPresentedRouletteEventId.current = latestRouletteEvent.id;
+    if (!eventName) return;
+
+    clearTimer(turnAnnouncementTimer);
+    setTurnAnnouncement(null);
+    setRoulettePresentation({
+      id: latestRouletteEvent.id,
+      event: eventName,
+      ownerId,
+    });
+  }, [state.activeRouletteEvent, state.structuredEngineEvents]);
+
+  const handleRoulettePresentationComplete = useCallback(() => {
+    setRoulettePresentation(null);
+  }, []);
 
   useEffect(() => {
     stateRef.current = state;
@@ -660,6 +802,8 @@ export default function MatchPage() {
       onlineActionUnsubscribe.current?.();
       onlineActionUnsubscribe.current = null;
       clearTimer(onlineActionPollTimer);
+      clearTimer(turnAnnouncementTimer);
+      lastTurnAnnouncementKey.current = null;
       fxTimers.current.forEach((timer) => window.clearTimeout(timer));
       fxTimers.current = [];
       travelTimers.current.forEach((timer) => window.clearTimeout(timer));
@@ -794,6 +938,11 @@ export default function MatchPage() {
   }, []);
 
   const commitPlay = useCallback((cardInstanceId: string, slotIndex: number) => {
+    if (interactionLocked) {
+      addUiLog("Дождитесь завершения экранного события.");
+      return;
+    }
+
     const currentState = stateRef.current;
     const problem = validatePlay(currentState, cardInstanceId, slotIndex);
 
@@ -812,9 +961,14 @@ export default function MatchPage() {
     } as GameAction);
 
     setSelectedCardId(null);
-  }, [addUiLog, recordDebug, submitGameAction]);
+  }, [addUiLog, interactionLocked, recordDebug, submitGameAction]);
 
   const playCard = useCallback((cardInstanceId: string, slotIndex: number) => {
+    if (interactionLocked) {
+      addUiLog("Дождитесь завершения экранного события.");
+      return;
+    }
+
     const currentState = stateRef.current;
     const problem = validatePlay(currentState, cardInstanceId, slotIndex);
 
@@ -833,9 +987,50 @@ export default function MatchPage() {
       pendingPlayTimer.current = null;
       commitPlay(cardInstanceId, slotIndex);
     }, PLAY_COMMIT_DELAY_MS);
-  }, [addUiLog, clearPendingPlay, commitPlay, recordDebug]);
+  }, [addUiLog, clearPendingPlay, commitPlay, interactionLocked, recordDebug]);
+
+  const handlePlayBlindTopCard = useCallback(() => {
+    if (interactionLocked) {
+      addUiLog("Дождитесь завершения Рулетки Судьбы.");
+      return;
+    }
+
+    const currentState = stateRef.current;
+
+    if (
+      currentState.winner ||
+      currentState.activePlayerId !== "player" ||
+      currentState.phase !== "main" ||
+      currentState.activeRouletteEvent !== "BLIND_TOP"
+    ) {
+      addUiLog("Blind Top can be used only during your active main phase.");
+      return;
+    }
+
+    const topCard = currentState.player.deck[0];
+    if (!topCard) {
+      addUiLog("Blind Top: your deck is empty.");
+      return;
+    }
+
+    const slotIndex = cardRequiresBoardSlot(topCard)
+      ? getPreferredFreeSlotIndex(currentState, "player")
+      : 0;
+
+    if (cardRequiresBoardSlot(topCard) && slotIndex < 0) {
+      addUiLog("Blind Top: no free board slot is available.");
+      return;
+    }
+
+    playCard(topCard.instanceId, slotIndex);
+  }, [addUiLog, interactionLocked, playCard]);
 
   const handleRoll = useCallback(() => {
+    if (interactionLocked) {
+      addUiLog("Дождитесь завершения объявления хода.");
+      return;
+    }
+
     const currentState = stateRef.current;
     if (currentState.winner) return;
 
@@ -848,9 +1043,14 @@ export default function MatchPage() {
     setSelectedCardId(null);
     clearPendingPlay();
     void submitGameAction({ type: "ROLL_D20", playerId: "player" } as GameAction);
-  }, [addUiLog, clearPendingPlay, recordDebug, submitGameAction]);
+  }, [addUiLog, clearPendingPlay, interactionLocked, recordDebug, submitGameAction]);
 
   const handleEndTurn = useCallback(() => {
+    if (interactionLocked) {
+      addUiLog("Дождитесь завершения экранного события.");
+      return;
+    }
+
     const currentState = stateRef.current;
 
     if (currentState.winner) return;
@@ -870,7 +1070,7 @@ export default function MatchPage() {
     setSelectedCardId(null);
     clearPendingPlay();
     void submitGameAction({ type: "END_TURN", playerId: "player" } as GameAction);
-  }, [addUiLog, clearPendingPlay, recordDebug, submitGameAction]);
+  }, [addUiLog, clearPendingPlay, interactionLocked, recordDebug, submitGameAction]);
 
   const handleAiTurn = useCallback(() => {
     const currentState = stateRef.current;
@@ -890,25 +1090,13 @@ export default function MatchPage() {
     send({ type: "AI_TURN" });
   }, [addUiLog, clearPendingPlay, recordDebug]);
 
-
-  const handleRouletteSpin = useCallback((rouletteId: string) => {
-    void submitGameAction({ type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId } as GameAction);
-  }, [submitGameAction]);
-
-  const handleRouletteReveal = useCallback((rouletteId: string, revealedAtMs: number) => {
-    const ownerId = stateRef.current.rouletteState?.ownerId ?? "player";
-    void submitGameAction({ type: "REVEAL_FATE_ROULETTE_RESULT", playerId: ownerId, rouletteId, revealedAtMs } as GameAction);
-  }, [submitGameAction]);
-
-  const handleRouletteConfirm = useCallback((rouletteId: string) => {
-    void submitGameAction({ type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId } as GameAction);
-  }, [submitGameAction]);
   const handleRestart = useCallback(() => {
     clearTimer(pendingPlayTimer);
     clearTimer(aiTurnTimer);
     clearTimer(autoPlayerTurnTimer);
     clearTimer(onlineQueueTimer);
     clearTimer(onlineActionPollTimer);
+    clearTimer(turnAnnouncementTimer);
     onlineActionUnsubscribe.current?.();
     onlineActionUnsubscribe.current = null;
     fxTimers.current.forEach((timer) => window.clearTimeout(timer));
@@ -926,6 +1114,11 @@ export default function MatchPage() {
     seenTacticalRevealIds.current = new Set();
     setMatchReward(null);
     rewardedMatchId.current = null;
+    aiActionGuardRef.current = null;
+    lastTurnAnnouncementKey.current = null;
+    lastPresentedRouletteEventId.current = 0;
+    setTurnAnnouncement(null);
+    setRoulettePresentation(null);
     setAiThinking(false);
     recordDebug({ source: "player", category: "match", actionType: "RESTART", message: "Player restarted match.", before: createMatchDebugStateSummary(stateRef.current) });
     send({
@@ -944,7 +1137,12 @@ export default function MatchPage() {
     clearTimer(pendingPlayTimer);
     clearTimer(aiTurnTimer);
     clearTimer(autoPlayerTurnTimer);
+    clearTimer(turnAnnouncementTimer);
     setSelectedCardId(null);
+    setTurnAnnouncement(null);
+    setRoulettePresentation(null);
+    lastTurnAnnouncementKey.current = null;
+    aiActionGuardRef.current = null;
     setAiThinking(false);
     void submitGameAction({
       type: "START_NEXT_BATTLE",
@@ -958,6 +1156,7 @@ export default function MatchPage() {
     clearTimer(autoPlayerTurnTimer);
     clearTimer(onlineQueueTimer);
     clearTimer(onlineActionPollTimer);
+    clearTimer(turnAnnouncementTimer);
     onlineActionUnsubscribe.current?.();
     onlineActionUnsubscribe.current = null;
     fxTimers.current.forEach((timer) => window.clearTimeout(timer));
@@ -1117,30 +1316,14 @@ export default function MatchPage() {
   useEffect(() => {
     clearTimer(aiTurnTimer);
 
-    if (isOnlineMode) {
+    if (isOnlineMode || interactionLocked) {
+      aiActionGuardRef.current = null;
       setAiThinking(false);
       return;
     }
 
-    if (state.phase === "roulette" && state.rouletteState?.ownerId === "enemy" && state.rouletteState.stage === "result") {
-      const remainingMs = getFateRouletteConfirmRemainingMs(state, Date.now());
-      setAiThinking(true);
-      aiTurnTimer.current = window.setTimeout(() => {
-        aiTurnTimer.current = null;
-        setAiThinking(false);
-        const currentState = stateRef.current;
-        if (currentState.phase !== "roulette" || currentState.rouletteState?.id !== state.rouletteState?.id || currentState.rouletteState?.stage !== "result") return;
-        const action = planNextAiAction(currentState);
-        if (!action) return;
-        recordDebug({ source: "ai", category: "action", actionType: "AI_ACTION_PLANNED", message: `AI planned ${action.type}.`, action, before: createMatchDebugStateSummary(currentState) });
-        send(action);
-      }, Math.max(0, remainingMs) + AUTO_AI_ROULETTE_CONFIRM_DELAY_MS);
-      return () => {
-        clearTimer(aiTurnTimer);
-      };
-    }
-
-    if (state.winner || (state.phase !== "enemy" && !(state.phase === "roulette" && state.rouletteState?.ownerId === "enemy"))) {
+    if (state.activePlayerId !== "enemy" || state.phase !== "enemy" || state.winner) {
+      aiActionGuardRef.current = null;
       setAiThinking(false);
       return;
     }
@@ -1151,11 +1334,8 @@ export default function MatchPage() {
       setAiThinking(false);
       const currentState = stateRef.current;
       const action = planNextAiAction(currentState);
-      if (currentState.phase === "roulette" && currentState.rouletteState?.stage === "spinning") {
-        setAiThinking(false);
-        return;
-      }
       if (!action) {
+        aiActionGuardRef.current = null;
         recordDebug({
           source: "warning",
           level: "warning",
@@ -1167,6 +1347,35 @@ export default function MatchPage() {
         send({ type: "END_TURN", playerId: "enemy" });
         return;
       }
+
+      const fingerprint = [
+        currentState.id,
+        currentState.battleNumber ?? 1,
+        currentState.turn,
+        currentState.currentTurn?.playsUsed ?? -1,
+        currentState.enemy.hand.length,
+        currentState.enemy.deck[0]?.instanceId ?? "no-top-card",
+        JSON.stringify(action),
+      ].join(":");
+      const previousGuard = aiActionGuardRef.current;
+      const repeats = previousGuard?.fingerprint === fingerprint ? previousGuard.repeats + 1 : 1;
+      aiActionGuardRef.current = { fingerprint, repeats };
+
+      if (repeats >= 4) {
+        aiActionGuardRef.current = null;
+        recordDebug({
+          source: "warning",
+          level: "warning",
+          category: "turn",
+          actionType: "AI_REPEATED_ACTION_GUARD",
+          message: `AI repeated the same unresolved action ${repeats} times; ending turn safely.`,
+          action,
+          before: createMatchDebugStateSummary(currentState),
+        });
+        send({ type: "END_TURN", playerId: "enemy" });
+        return;
+      }
+
       recordDebug({ source: "ai", category: "action", actionType: "AI_ACTION_PLANNED", message: `AI planned ${action.type}.`, action, before: createMatchDebugStateSummary(currentState) });
       send(action);
     }, state.currentTurn?.playerId === "enemy" ? AUTO_AI_DELAY_MS : Math.max(150, Math.floor(AUTO_AI_DELAY_MS / 2)));
@@ -1174,14 +1383,14 @@ export default function MatchPage() {
     return () => {
       clearTimer(aiTurnTimer);
     };
-  }, [recordDebug, isOnlineMode, state]);
+  }, [interactionLocked, recordDebug, isOnlineMode, state]);
 
   useEffect(() => {
     clearTimer(autoPlayerTurnTimer);
 
     previousAutoFlowState.current = state;
 
-    if (state.winner || state.activePlayerId !== "player" || state.phase !== "main") {
+    if (interactionLocked || state.winner || state.activePlayerId !== "player" || state.phase !== "main") {
       return;
     }
 
@@ -1203,7 +1412,7 @@ export default function MatchPage() {
     return () => {
       clearTimer(autoPlayerTurnTimer);
     };
-  }, [recordDebug, state, submitGameAction]);
+  }, [interactionLocked, recordDebug, state, submitGameAction]);
 
   useEffect(() => {
     onlineActionUnsubscribe.current?.();
@@ -1281,6 +1490,40 @@ export default function MatchPage() {
 
   const mergedLog = useMemo(() => [...state.log, ...uiLog].slice(-18), [state.log, uiLog]);
 
+  if (!currentDeckLoadout.isReady) {
+    return (
+      <main className="matchPage onlineMatchmakingPage">
+        <div className="matchBackdrop" aria-hidden="true" />
+        <header className="matchHeader">
+          <button className="matchBackButton" type="button" onClick={() => nav("/play")}>
+            ← Back to modes
+          </button>
+          <div>
+            <span>Deck validation</span>
+            <h1>FRAKTUM Duel</h1>
+          </div>
+        </header>
+
+        <section className="onlineMatchmakingCard" role="alert">
+          <span className="onlineMatchmakingKicker">КОЛОДА НЕ ГОТОВА</span>
+          <h2>Нужно собрать 20 основных карт</h2>
+          <p>
+            Сейчас выбрано {currentDeckLoadout.mainDeckCount} из {FRAKTUM_MAIN_DECK_SIZE}.
+            Персонаж и усиления считаются отдельно и не заменяют карты основной колоды.
+          </p>
+
+          <div className="onlineMatchmakingActions">
+            <button className="matchGoldButton" type="button" onClick={() => nav("/deck")}>
+              Открыть DECK
+            </button>
+            <button className="matchGhostButton" type="button" onClick={() => nav("/play")}>
+              Назад к режимам
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   if (isOnlineMode && onlineQueueState !== "matched") {
     return (
@@ -1302,7 +1545,7 @@ export default function MatchPage() {
 
           <div className="onlineMatchmakingMeta">
             <div><span>Account</span><b>{playerName}</b></div>
-            <div><span>Deck</span><b>{deckIds.length}/20</b></div>
+            <div><span>Deck</span><b>{currentDeckLoadout.mainDeckCount}/{FRAKTUM_MAIN_DECK_SIZE}</b></div>
             <div><span>Server</span><b>{isOnlineMatchmakingConfigured() ? "Supabase" : "Not configured"}</b></div>
             <div><span>Room</span><b>{onlineRoom ? onlineRoom.id.slice(0, 8) : "—"}</b></div>
             <div><span>Seat</span><b>{onlineSeat ? onlineSeat.toUpperCase() : "—"}</b></div>
@@ -1349,13 +1592,11 @@ export default function MatchPage() {
         onSelectCard={setSelectedCardId}
         onRoll={handleRoll}
         onPlay={playCard}
+        onPlayTopCard={handlePlayBlindTopCard}
         onInvalidDrop={handleInvalidDrop}
         logEntries={mergedLog}
         onEndTurn={handleEndTurn}
         onAiTurn={handleAiTurn}
-        onRouletteSpin={handleRouletteSpin}
-        onRouletteReveal={handleRouletteReveal}
-        onRouletteConfirm={handleRouletteConfirm}
         onRestart={handleRestart}
         onStartNextBattle={handleStartNextBattle}
         onConcede={handleConcede}
@@ -1368,6 +1609,10 @@ export default function MatchPage() {
         matchMode={matchMode}
         opponentName={opponentUi.name}
         opponentRankLabel={opponentUi.rankLabel}
+        turnAnnouncement={turnAnnouncement}
+        roulettePresentation={roulettePresentation}
+        interactionLocked={interactionLocked}
+        onRoulettePresentationComplete={handleRoulettePresentationComplete}
       />
       <MatchDebugConsole
         enabled={debugRecorder.enabled}

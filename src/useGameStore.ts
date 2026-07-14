@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { CARDS, CARDS_BY_ID, getRandomCards } from "./game/cards";
 import { createUniqueCardId, getDefinitionIdByUniqueId } from "./game/cardIdentity";
+import { getWillCostByRarity } from "./game/rarityWillCost";
+import { sanitizeDeckIds } from "./game/deckRules";
 import type {
   AuctionClaimResult,
   AuctionListing,
@@ -91,7 +93,6 @@ const WILL_UPGRADE_BASE_REGEN = 2;
 const WILL_UPGRADE_MAX_MAX_WILL_LEVEL = 7;
 const WILL_UPGRADE_MAX_REGEN_LEVEL = 5;
 const CRAFT_COST = 10;
-const MAX_DECK_SIZE = 20;
 const MAX_SHOWCASE_SIZE = 3;
 const MAX_MATCH_HISTORY = 20;
 const MAX_PACK_HISTORY = 50;
@@ -483,7 +484,7 @@ function normalizeOwned(
     isFoil,
     foilColor: isFoil ? rarity : undefined,
     marketValue: options.marketValue ?? calculateCardMarketValue(rarity, isFoil),
-    cost: definition.cost,
+    cost: getWillCostByRarity(rarity),
     attack: definition.attack,
     health: definition.health,
     description: definition.description,
@@ -540,22 +541,7 @@ function buildUniquePackBaseIds(
 }
 
 function getDeckIdsWithoutDuplicateBase(ownedCards: readonly OwnedCard[], ids: readonly string[]) {
-  const ownedById = new Map(ownedCards.map((card) => [card.instanceId, card]));
-  const usedBaseIds = new Set<string>();
-  const result: string[] = [];
-
-  for (const id of ids) {
-    const card = ownedById.get(id);
-    if (!card?.baseId) continue;
-    if (usedBaseIds.has(card.baseId)) continue;
-
-    usedBaseIds.add(card.baseId);
-    result.push(id);
-
-    if (result.length >= MAX_DECK_SIZE) break;
-  }
-
-  return result;
+  return sanitizeDeckIds(ownedCards, ids);
 }
 
 function createAuctionId(instanceId: string) {
@@ -576,7 +562,8 @@ function getAuctionNetProceeds(gross: number) {
   return { gross: safeGross, fee, net: Math.max(0, safeGross - fee) };
 }
 
-function getNextNpcBidAt(_now: number) {
+function getNextNpcBidAt(now: number) {
+  void now;
   return undefined;
 }
 
@@ -1113,7 +1100,8 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
-      simulateAuctionBid: (_listingId) => {
+      simulateAuctionBid: (listingId) => {
+        void listingId;
         // Stage W: market bots/test bids are disabled. Real bids must come from
         // Supabase player accounts in the next backend stage.
         return false;
@@ -1177,8 +1165,15 @@ export const useGameStore = create<GameState>()(
           .map((deckId) => get().ownedCards.find((entry) => entry.instanceId === deckId))
           .filter((entry): entry is OwnedCard => Boolean(entry));
 
-        if (deckCards.some((entry) => entry.baseId === card.baseId) || deckCards.length >= MAX_DECK_SIZE) return;
-        set({ deckIds: getDeckIdsWithoutDuplicateBase(get().ownedCards, [...get().deckIds, id]) });
+        if (deckCards.some((entry) => entry.baseId === card.baseId)) return;
+
+        const nextDeckIds = getDeckIdsWithoutDuplicateBase(
+          get().ownedCards,
+          [...get().deckIds, id],
+        );
+
+        if (!nextDeckIds.includes(id)) return;
+        set({ deckIds: nextDeckIds });
       },
 
       removeFromDeck: (id) => set({ deckIds: get().deckIds.filter((deckId) => deckId !== id) }),

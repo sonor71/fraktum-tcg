@@ -14,6 +14,7 @@ import Settings from "./screens/Settings";
 import Shop from "./screens/Shop";
 import Shell from "./ui/shell";
 import { syncSupabaseSessionFromLauncher } from "./services/supabaseClient";
+import { CardPassportHost } from "./components/CardPassport";
 
 export default function App() {
   useEffect(() => {
@@ -23,6 +24,7 @@ export default function App() {
   return (
     <HashRouter >
       <BackgroundMusic />
+      <CardPassportHost />
 
       <Shell>
         <Routes>

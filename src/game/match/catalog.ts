@@ -1,4 +1,6 @@
 import type { OwnedCard } from "../../useGameStore";
+import { CARDS_BY_ID } from "../cards";
+import { getWillCostByRarity } from "../rarityWillCost";
 import type {
   CardKind,
   CardTemplate,
@@ -9,7 +11,7 @@ import type {
 const CARD_BACK = "/cards/card-back.png";
 
 function clampWill(value: number) {
-  return Math.min(4, Math.max(1, value));
+  return Math.min(10, Math.max(1, value));
 }
 
 function normalizeKind(value: string | undefined): CardKind {
@@ -23,30 +25,20 @@ function normalizeKind(value: string | undefined): CardKind {
 function normalizeRarity(value: string | undefined) {
   const source = (value ?? "").trim().toLowerCase();
   if (source.includes("common") || source.includes("обыч")) return "common";
-  if (source.includes("uncommon") || source.includes("необыч")) return "uncommon";
   if (source.includes("rare") || source.includes("редк")) return "rare";
   if (source.includes("epic") || source.includes("эпич")) return "epic";
-  if (source.includes("legend") || source.includes("легенд")) return "legendary";
   if (source.includes("myth") || source.includes("миф")) return "mythic";
+  if (source.includes("legend") || source.includes("легенд")) return "legendary";
   if (source.includes("chrom") || source.includes("хром")) return "chromatic";
+  if (source.includes("exotic") || source.includes("экзот")) return "exotic";
+  if (source.includes("divine") || source.includes("божеств")) return "divine";
+  if (source.includes("forgotten") || source.includes("забыт")) return "forgotten";
+  if (source.includes("archaic") || source.includes("архаич")) return "archaic";
   return "common";
 }
 
 function willFromRarity(rarity: string) {
-  switch (rarity) {
-    case "rare":
-      return 2;
-    case "epic":
-      return 3;
-    case "legendary":
-    case "mythic":
-    case "chromatic":
-      return 4;
-    case "uncommon":
-      return 2;
-    default:
-      return 1;
-  }
+  return getWillCostByRarity(rarity);
 }
 
 const TEMPLATE_LIBRARY: Record<string, CardTemplate> = {
@@ -392,6 +384,7 @@ export function getTemplateForOwnedCard(card: OwnedCard): CardTemplate {
   if (byBaseId) {
     return {
       ...byBaseId,
+      willCost: getWillCostByRarity(card.rarity),
       frontSrc: card.frontSrc || byBaseId.frontSrc || CARD_BACK,
       name: card.title || byBaseId.name,
     };
@@ -470,12 +463,17 @@ export function getTemplateForOwnedCard(card: OwnedCard): CardTemplate {
 }
 
 export function createMatchCard(template: CardTemplate, instanceId: string): MatchCard {
+  const catalogRarity = CARDS_BY_ID[template.baseId]?.rarity;
+  const willCost = catalogRarity
+    ? getWillCostByRarity(catalogRarity)
+    : clampWill(template.willCost);
+
   return {
     instanceId,
     baseId: template.baseId,
     name: template.name,
     kind: template.kind,
-    willCost: template.willCost,
+    willCost,
     attack: template.attack,
     health: template.health,
     description: template.description,

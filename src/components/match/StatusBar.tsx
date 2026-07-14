@@ -64,11 +64,15 @@ export function StatusBar({
   useEffect(() => {
     if (safeValue === previousValue.current) return;
 
-    setFlash(safeValue > previousValue.current ? "gain" : "loss");
+    const direction = safeValue > previousValue.current ? "gain" : "loss";
     previousValue.current = safeValue;
+    const frameId = window.requestAnimationFrame(() => setFlash(direction));
+    const timeoutId = window.setTimeout(() => setFlash(null), 420);
 
-    const id = window.setTimeout(() => setFlash(null), 420);
-    return () => window.clearTimeout(id);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timeoutId);
+    };
   }, [safeValue]);
 
   const tickCount = useMemo(() => {

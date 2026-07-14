@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { CardInstance } from "../game/core/types";
+import { getWillCostByRarity } from "../game/rarityWillCost";
 
 type CardViewProps = {
   card: CardInstance;
@@ -76,11 +77,11 @@ export function CardView({
   const definitionRecord = definition as unknown as Record<string, unknown>;
   const { currentHp, maxHp, hasHp } = getCardHp(card);
 
-  const cost = Math.max(0, clampNumber(definition.cost ?? definition.willCost));
   const title = readString(definitionRecord, ["title", "ruTitle", "name"], card.baseId || "Unknown card");
   const description = readString(definitionRecord, ["description", "text", "effectText"]);
   const image = readString(definitionRecord, ["image", "imageUrl", "src", "path"], "/cards/card-back.png");
   const rarity = readString(definitionRecord, ["rarity"], "common");
+  const cost = getWillCostByRarity(rarity);
   const type = readString(definitionRecord, ["type"], "card");
   const hpStateClass = getHpStateClass(currentHp, maxHp);
 

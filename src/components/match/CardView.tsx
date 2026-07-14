@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { CardInstance } from "../../game/core/types";
+import { getWillCostByRarity } from "../../game/rarityWillCost";
 import "./match.css";
 
 type CardViewProps = {
@@ -9,6 +10,7 @@ type CardViewProps = {
   selected?: boolean;
   size?: "hand" | "board" | "pile";
   dragging?: boolean;
+  faceDown?: boolean;
 };
 
 type CardDefinitionMeta = CardInstance["definition"] & {
@@ -72,16 +74,17 @@ export function CardView({
   selected = false,
   size = "hand",
   dragging = false,
+  faceDown = false,
 }: CardViewProps) {
   const definition = card.definition as CardDefinitionMeta;
   const definitionRecord = definition as unknown as Record<string, unknown>;
   const { currentHp, maxHp, hasHp } = getCardHp(card);
 
-  const cost = Math.max(0, clampNumber(definition.cost ?? definition.willCost));
   const title = readString(definitionRecord, ["title", "ruTitle", "name"], card.baseId || "Unknown card");
   const description = readString(definitionRecord, ["description", "text", "effectText"]);
   const image = readString(definitionRecord, ["image", "imageUrl", "src", "path"], "/cards/card-back.png");
   const rarity = readString(definitionRecord, ["rarity"], "common");
+  const cost = getWillCostByRarity(rarity);
   const type = readString(definitionRecord, ["type"], "card");
   const hpStateClass = getHpStateClass(currentHp, maxHp);
 
@@ -100,6 +103,7 @@ export function CardView({
     dragging ? "is-dragging" : "",
     disabled ? "is-disabled" : "",
     card.temporaryUntilRoundEnd ? "is-temporary" : "",
+    faceDown ? "is-face-down" : "",
   ].filter(Boolean).join(" ");
 
   const hpLabel = maxHp > 0 ? `${currentHp}/${maxHp}` : `${currentHp}`;
@@ -112,27 +116,29 @@ export function CardView({
       type="button"
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      title={`${title}${readableDescription}`}
+      title={faceDown ? "Hidden card" : `${title}${readableDescription}`}
       data-card-id={card.instanceId}
-      data-card-base-id={card.baseId}
-      data-card-title={title}
-      data-card-cost={cost}
-      data-card-hp={hasHp ? currentHp : undefined}
-      aria-label={`${title}. Will cost ${cost}${hasHp ? `. HP ${hpLabel}` : ""}`}
+      data-card-base-id={faceDown ? undefined : card.baseId}
+      data-card-title={faceDown ? "Hidden card" : title}
+      data-card-cost={faceDown ? undefined : cost}
+      data-card-hp={faceDown ? undefined : hasHp ? currentHp : undefined}
+      aria-label={faceDown ? "Hidden card" : `${title}. Will cost ${cost}${hasHp ? `. HP ${hpLabel}` : ""}`}
     >
-      <img className="matchCardImage" src={image} alt={title} draggable={false} />
+      <img className="matchCardImage" src={faceDown ? "/cards/card-back.png" : image} alt={faceDown ? "Hidden card" : title} draggable={false} />
 
-      <span className="matchCardBadge is-cost" aria-hidden="true">
-        {cost}
-      </span>
+      {!faceDown ? (
+        <span className="matchCardBadge is-cost" aria-hidden="true">
+          {cost}
+        </span>
+      ) : null}
 
-      {hasHp ? (
+      {!faceDown && hasHp ? (
         <span className="matchCardBadge is-hp" aria-hidden="true">
           {size === "pile" ? currentHp : hpLabel}
         </span>
       ) : null}
 
-      {card.temporaryUntilRoundEnd ? (
+      {!faceDown && card.temporaryUntilRoundEnd ? (
         <span className="matchCardBadge is-temp" aria-hidden="true">
           TEMP
         </span>
