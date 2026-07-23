@@ -1,4 +1,4 @@
-import type { GameAction } from "../core/GameAction";
+﻿import type { GameAction } from "../core/GameAction";
 import type {
   CardDefinition,
   CardInstance,
@@ -425,11 +425,23 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
   const payloadRecord = payload as unknown as Record<string, unknown>;
   const playerWillConfig = normalizeWillMatchConfig(payloadRecord.playerWillStats ?? payloadRecord.playerWillConfig);
   const enemyWillConfig = normalizeWillMatchConfig(payloadRecord.enemyWillStats ?? payloadRecord.enemyWillConfig);
-  const playerDeck = payload.playerDeck && payload.playerDeck.length > 0 ? payload.playerDeck : defs;
-  const enemyDeck =
+  const playerMainDeck = payload.playerDeck && payload.playerDeck.length > 0 ? payload.playerDeck : defs;
+  const enemyMainDeck =
     payload.enemyDeck && payload.enemyDeck.length > 0
       ? payload.enemyDeck
       : defs.map((card) => (card.id === "brian" ? defs.find((definition) => definition.id === "felix") ?? card : card));
+
+  const playerDeck = [
+    ...(payload.playerHero ? [payload.playerHero] : []),
+    ...(payload.playerBonusCards ?? []),
+    ...playerMainDeck,
+  ];
+
+  const enemyDeck = [
+    ...(payload.enemyHero ? [payload.enemyHero] : []),
+    ...(payload.enemyBonusCards ?? []),
+    ...enemyMainDeck,
+  ];
 
   let seed = payload.seed ?? 12345;
   let playerSide: PlayerState = makeSide("player", playerDeck, defs, playerWillConfig);
@@ -971,3 +983,4 @@ export function checkWinCondition(state: MatchState): MatchState {
 
   return state;
 }
+
