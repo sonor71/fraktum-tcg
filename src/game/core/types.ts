@@ -1,4 +1,4 @@
-export type MatchPhase = "mulligan" | "turnStart" | "draw" | "roll" | "roulette" | "fieldCombat" | "main" | "turnEnd" | "enemy" | "betweenBattles" | "ended";
+﻿export type MatchPhase = "mulligan" | "turnStart" | "draw" | "roll" | "roulette" | "fieldCombat" | "main" | "turnEnd" | "enemy" | "betweenBattles" | "ended";
 export type PlayerId = "player" | "enemy";
 export type CardType = "character" | "event" | "attack" | "effect" | "tactic" | "upgrade" | "bonus";
 export type FateRouletteStage = "awaitingSpin" | "spinning" | "result";
@@ -17,4 +17,25 @@ export type TargetRef = { type: "hero" | "slot"; playerId: PlayerId; slotIndex?:
 export type PlayerState = { id: PlayerId; hero: CardInstance; hp: number; maxHp: number; shield: number; will: number; maxWill: number; willRegenPerRound?: number; personalTurnsTaken?: number; deck: CardInstance[]; hand: CardInstance[]; discard: CardInstance[]; exile?: CardInstance[]; bonusCards: CardInstance[]; effects: ActiveEffect[]; lastTurnLostHp: number };
 export type EngineEvent = { id: number; type: string; message: string; payload?: Record<string, unknown> };
 export type MatchState = { engineEventSequence?: number; structuredEngineEvents?: EngineEvent[]; id: string; phase: MatchPhase; turn: number; activePlayerId: PlayerId; player: PlayerState; enemy: PlayerState; board: { playerSlots: Array<CardInstance | null>; enemySlots: Array<CardInstance | null> }; stack: PendingEffect[]; log: string[]; rngSeed: number; winner?: "player" | "enemy" | "draw"; lastRoll?: number; initiativeRolls?: Array<{ player: number; enemy: number }>; battleNumber?: number; seriesScore?: Record<PlayerId, number>; caduceusUsed?: boolean; rouletteUsedThisBattle?: boolean; activeRouletteEvent?: string; rouletteOwnerId?: PlayerId; rouletteExpiresBeforeOwnerPersonalTurn?: number; rouletteState?: FateRouletteState; currentTurn?: { playerId: PlayerId; d20Limit: number | "unlimited"; playsUsed: number; cardsPlayed: number; destroyedOwnCard: boolean; freeCards: boolean; skipDamageApplied: boolean; rouletteResolvedThisTurn?: boolean; timerSeconds: number; playedCosts: Array<{ playerId: PlayerId; cardTitle: string; cost: number }> }; sharedDeck?: CardInstance[]; battleResult?: PlayerId | "draw"; battleEndReason?: string; } ;
-export type StartMatchPayload = { seed?: number; playerDeck?: CardDefinition[]; enemyDeck?: CardDefinition[]; startingPlayerId?: PlayerId };
+export type MatchWillStats = {
+  maxWill?: number;
+  regenPerRound?: number;
+  willRegen?: number;
+};
+
+export type StartMatchPayload = {
+  seed?: number;
+  playerDeck?: CardDefinition[];
+  enemyDeck?: CardDefinition[];
+  playerHero?: CardDefinition;
+  enemyHero?: CardDefinition;
+  playerBonusCards?: CardDefinition[];
+  enemyBonusCards?: CardDefinition[];
+  playerWillStats?: MatchWillStats;
+  enemyWillStats?: MatchWillStats;
+  playerWillConfig?: MatchWillStats;
+  enemyWillConfig?: MatchWillStats;
+  startingPlayerId?: PlayerId;
+  deckError?: string;
+};
+
