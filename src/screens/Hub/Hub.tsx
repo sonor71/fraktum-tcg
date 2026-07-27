@@ -15,6 +15,8 @@ import {
 } from "./hubMaps";
 import { getPlayerCollisionRect, HUB_CAMERA_ZOOM, useHubMovement } from "./useHubMovement";
 import { createHubRoomSearch, getHubRoomFromSearch } from "./hubNavigation";
+import DeveloperEditor, { RoomObjectLayer } from "../../runtime-editor/DeveloperEditor";
+import { useRuntimeEditorStore } from "../../runtime-editor/runtimeEditorStore";
 
 const TRANSITION_MS = 420;
 const MIN_ZONE_SIZE = 4;
@@ -104,6 +106,10 @@ export default function Hub() {
   const playerName = useGameStore((state) => state.playerName);
   const avatar = useGameStore((state) => state.avatar);
   const level = useGameStore((state) => state.level);
+  const runtimeMode = useRuntimeEditorStore((state) => state.mode);
+  const runtimeWorld = useRuntimeEditorStore((state) => state.world);
+  const runtimeSceneId = useRuntimeEditorStore((state) => state.currentSceneId);
+  const runtimeRoomId = useRuntimeEditorStore((state) => state.currentRoomId);
   const [currentMapId, setCurrentMapId] = useState<HubMapId>(initialMapId);
   const [spawnPoint, setSpawnPoint] = useState<HubPoint>(HUB_MAPS[initialMapId].spawnPoint);
   const [mapDimensions, setMapDimensions] = useState({ width: HUB_MAPS[initialMapId].width, height: HUB_MAPS[initialMapId].height });
@@ -116,7 +122,13 @@ export default function Hub() {
   const [draftZone, setDraftZone] = useState<{ type: EditorModeType; start: HubPoint; end: HubPoint } | null>(null);
   const [selectedZone, setSelectedZone] = useState<SelectedZone>(null);
   const [copyStatus, setCopyStatus] = useState("");
-  const currentMap = HUB_MAPS[currentMapId];
+  const runtimeRoom = runtimeWorld.scenes.find((scene) => scene.id === runtimeSceneId)?.rooms.find((room) => room.id === runtimeRoomId);
+  const legacyRoomId = runtimeRoom?.metadata?.legacyMapId;
+  const currentMap = useMemo(() => typeof legacyRoomId === "string" && legacyRoomId in HUB_MAPS
+    ? HUB_MAPS[legacyRoomId as HubMapId]
+    : runtimeRoom
+      ? { ...HUB_MAPS[currentMapId], title: runtimeRoom.name, image: "", width: runtimeRoom.width, height: runtimeRoom.height, spawnPoint: runtimeRoom.spawnPoints[0]?.position ?? { x: runtimeRoom.width / 2, y: runtimeRoom.height / 2 }, exits: [], colliders: [] }
+      : HUB_MAPS[currentMapId], [currentMapId, legacyRoomId, runtimeRoom]);
   const currentColliders = mapColliders[currentMapId];
   const currentOcclusionZones = mapOcclusionZones[currentMapId];
 
@@ -133,7 +145,7 @@ export default function Hub() {
     isMoving,
     resetPosition,
     mapTransform,
-  } = useHubMovement(editableCurrentMap, mapDimensions, spawnPoint);
+  } = useHubMovement(editableCurrentMap, mapDimensions, spawnPoint, runtimeMode === "play");
 
   const {
     presenceStatus,
@@ -214,7 +226,26 @@ export default function Hub() {
   }, [resetPosition]);
 
   useEffect(() => {
+    if (!runtimeRoom) return;
+    const synchronizeRoom = window.setTimeout(() => {
+      const nextLegacyId = runtimeRoom.metadata?.legacyMapId;
+      if (typeof nextLegacyId === "string" && nextLegacyId in HUB_MAPS && nextLegacyId !== currentMapId) {
+        enterMap(nextLegacyId as HubMapId, runtimeRoom.spawnPoints[0]?.position ?? HUB_MAPS[nextLegacyId as HubMapId].spawnPoint);
+        return;
+      }
+      if (!nextLegacyId) {
+        const point = runtimeRoom.spawnPoints[0]?.position ?? { x: runtimeRoom.width / 2, y: runtimeRoom.height / 2 };
+        setMapDimensions({ width: runtimeRoom.width, height: runtimeRoom.height });
+        setSpawnPoint(point);
+        resetPosition(point);
+      }
+    }, 0);
+    return () => window.clearTimeout(synchronizeRoom);
+  }, [currentMapId, enterMap, resetPosition, runtimeRoom]);
+
+  useEffect(() => {
     const requestedMapId = getHubRoomFromSearch(location.search);
+    useRuntimeEditorStore.getState().loadRoom("fraktum_hub", requestedMapId);
     if (requestedMapId === currentMapId || transitionTargetRef.current === requestedMapId) return;
 
     const requestTimeout = window.setTimeout(() => {
@@ -232,7 +263,7 @@ export default function Hub() {
   }, []);
 
   const activateExit = useCallback((exit: HubExit | undefined) => {
-    if (!exit || isTransitioning) return;
+    if (!exit || isTransitioning || runtimeMode === "edit") return;
 
     if (exit.type === "route") {
       navigate(exit.route);
@@ -243,7 +274,7 @@ export default function Hub() {
   pathname: "/",
   search: createHubRoomSearch(exit.targetMap),
 });
-}, [isTransitioning, navigate]);
+}, [isTransitioning, navigate, runtimeMode]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -430,6 +461,7 @@ export default function Hub() {
             <strong>{currentMap.title}</strong>
             <span>Place PNG at {currentMap.image}</span>
           </div>
+          <RoomObjectLayer />
 
           {currentMap.exits.map((exit) => {
             const isActive = nearbyExit?.id === exit.id;
@@ -622,6 +654,7 @@ export default function Hub() {
       ) : null}
 
       <div className={`hubFade ${isTransitioning ? "is-active" : ""}`} />
+      <DeveloperEditor />
     </section>
   );
 
