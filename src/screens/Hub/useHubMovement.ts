@@ -68,7 +68,7 @@ function collidesWithMap(position: HubPoint, colliders: HubCollider[] = []) {
   return colliders.some((collider) => rectanglesOverlap(playerRect, collider));
 }
 
-export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint: HubPoint) {
+export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint: HubPoint, enabled = true) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
   const positionRef = useRef(initialPoint);
@@ -115,6 +115,7 @@ export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (!enabled) return;
       const key = event.key.toLowerCase();
       if (!MOVEMENT_KEYS.has(key)) return;
 
@@ -133,7 +134,13 @@ export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, []);
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled) {
+      keysRef.current.clear();
+    }
+  }, [enabled]);
 
   useEffect(() => {
     positionRef.current = initialPoint;
@@ -163,7 +170,7 @@ export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint
       if (keys.has("a") || keys.has("arrowleft")) dx -= 1;
       if (keys.has("d") || keys.has("arrowright")) dx += 1;
 
-      const moving = dx !== 0 || dy !== 0;
+      const moving = enabled && (dx !== 0 || dy !== 0);
 
       if (moving) {
         const length = Math.hypot(dx, dy) || 1;
@@ -208,7 +215,7 @@ export function useHubMovement(map: HubMapConfig, dimensions: Size, initialPoint
     frame = requestAnimationFrame(tick);
 
     return () => cancelAnimationFrame(frame);
-  }, [dimensions, map, viewport]);
+  }, [dimensions, enabled, map, viewport]);
 
   const mapTransform = useMemo(
     () =>
