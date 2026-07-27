@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { DEFAULT_GAME_WORLD } from "./defaultWorld";
 import { cloneWorld, loadStoredWorld, saveStoredWorld } from "./worldPersistence";
-import type { GameSceneData, GameWorldData, MapObjectData, RoomData, RuntimeMode } from "./worldTypes";
+import type { GameSceneData, GameWorldData, MapObjectData, RoomData, RuntimeMode, WorldAssetData } from "./worldTypes";
 
 type RuntimeEditorState = {
   mode: RuntimeMode;
@@ -16,6 +16,10 @@ type RuntimeEditorState = {
   createScene: (scene: GameSceneData) => boolean;
   createRoom: (sceneId: string, room: RoomData) => boolean;
   placeObject: (object: MapObjectData) => void;
+  updateObject: (id: string, changes: Partial<MapObjectData>) => void;
+  deleteObject: (id: string) => void;
+  updateRoom: (changes: Partial<RoomData>) => void;
+  addAsset: (asset: WorldAssetData) => void;
   selectObject: (id: string | null) => void;
   replaceWorld: (world: GameWorldData) => void;
   saveWorld: () => void;
@@ -54,6 +58,20 @@ export const useRuntimeEditorStore = create<RuntimeEditorState>((set, get) => ({
     world: { ...state.world, scenes: state.world.scenes.map((scene) => scene.id !== state.currentSceneId ? scene : { ...scene, rooms: scene.rooms.map((room) => room.id !== state.currentRoomId ? room : { ...room, objects: [...room.objects, object] }) }) },
     selectedObjectId: object.id, isDirty: true,
   })),
+  updateObject: (id, changes) => set((state) => ({
+    world: { ...state.world, scenes: state.world.scenes.map((scene) => scene.id !== state.currentSceneId ? scene : { ...scene, rooms: scene.rooms.map((room) => room.id !== state.currentRoomId ? room : { ...room, objects: room.objects.map((object) => object.id === id ? { ...object, ...changes } : object) }) }) },
+    isDirty: true,
+  })),
+  deleteObject: (id) => set((state) => ({
+    world: { ...state.world, scenes: state.world.scenes.map((scene) => scene.id !== state.currentSceneId ? scene : { ...scene, rooms: scene.rooms.map((room) => room.id !== state.currentRoomId ? room : { ...room, objects: room.objects.filter((object) => object.id !== id) }) }) },
+    selectedObjectId: state.selectedObjectId === id ? null : state.selectedObjectId,
+    isDirty: true,
+  })),
+  updateRoom: (changes) => set((state) => ({
+    world: { ...state.world, scenes: state.world.scenes.map((scene) => scene.id !== state.currentSceneId ? scene : { ...scene, rooms: scene.rooms.map((room) => room.id === state.currentRoomId ? { ...room, ...changes } : room) }) },
+    isDirty: true,
+  })),
+  addAsset: (asset) => set((state) => ({ world: { ...state.world, assets: [...(state.world.assets ?? []).filter((item) => item.id !== asset.id), asset] }, isDirty: true })),
   selectObject: (selectedObjectId) => set({ selectedObjectId }),
   replaceWorld: (world) => {
     const scene = world.scenes.find((item) => item.id === world.startSceneId) ?? world.scenes[0];
@@ -65,4 +83,3 @@ export const useRuntimeEditorStore = create<RuntimeEditorState>((set, get) => ({
 if (typeof window !== "undefined") {
   window.setInterval(() => { const state = useRuntimeEditorStore.getState(); if (state.isDirty) state.saveWorld(); }, 30_000);
 }
-

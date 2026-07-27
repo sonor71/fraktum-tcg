@@ -3,6 +3,16 @@ export type RoomType = "outdoor" | "indoor" | "dungeon" | "special";
 export type MapObjectType = "ground" | "path" | "tree" | "bush" | "rock" | "building" | "stall" | "campfire" | "gate" | "door" | "chest" | "table" | "decoration" | "npc" | "effect" | "light" | "customSprite";
 export type PointData = { x: number; y: number };
 
+export interface WorldAssetData {
+  id: string;
+  name: string;
+  source: string;
+  type: MapObjectType;
+  width: number;
+  height: number;
+  importedAt: string;
+}
+
 export interface ColliderData {
   id: string;
   type: "box" | "circle" | "polygon";
@@ -98,5 +108,5 @@ export interface GameWorldData {
   version: number;
   startSceneId: string;
   scenes: GameSceneData[];
+  assets?: WorldAssetData[];
 }
-

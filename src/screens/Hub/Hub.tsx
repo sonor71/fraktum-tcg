@@ -124,13 +124,16 @@ export default function Hub() {
   const [copyStatus, setCopyStatus] = useState("");
   const runtimeRoom = runtimeWorld.scenes.find((scene) => scene.id === runtimeSceneId)?.rooms.find((room) => room.id === runtimeRoomId);
   const legacyRoomId = runtimeRoom?.metadata?.legacyMapId;
+  const roomBackgroundAsset = runtimeRoom?.metadata?.backgroundAsset;
   const currentMap = useMemo(() => typeof legacyRoomId === "string" && legacyRoomId in HUB_MAPS
-    ? HUB_MAPS[legacyRoomId as HubMapId]
+    ? { ...HUB_MAPS[legacyRoomId as HubMapId], image: typeof roomBackgroundAsset === "string" ? roomBackgroundAsset : HUB_MAPS[legacyRoomId as HubMapId].image }
     : runtimeRoom
-      ? { ...HUB_MAPS[currentMapId], title: runtimeRoom.name, image: "", width: runtimeRoom.width, height: runtimeRoom.height, spawnPoint: runtimeRoom.spawnPoints[0]?.position ?? { x: runtimeRoom.width / 2, y: runtimeRoom.height / 2 }, exits: [], colliders: [] }
-      : HUB_MAPS[currentMapId], [currentMapId, legacyRoomId, runtimeRoom]);
-  const currentColliders = mapColliders[currentMapId];
-  const currentOcclusionZones = mapOcclusionZones[currentMapId];
+      ? { ...HUB_MAPS[currentMapId], title: runtimeRoom.name, image: typeof roomBackgroundAsset === "string" ? roomBackgroundAsset : "", width: runtimeRoom.width, height: runtimeRoom.height, spawnPoint: runtimeRoom.spawnPoints[0]?.position ?? { x: runtimeRoom.width / 2, y: runtimeRoom.height / 2 }, exits: [], colliders: [] }
+      : HUB_MAPS[currentMapId], [currentMapId, legacyRoomId, roomBackgroundAsset, runtimeRoom]);
+  const currentColliders = typeof legacyRoomId === "string" && legacyRoomId in HUB_MAPS
+    ? mapColliders[legacyRoomId as HubMapId]
+    : (runtimeRoom?.colliders ?? []).filter((collider) => collider.enabled && collider.type === "box" && collider.size).map((collider) => ({ id: collider.id, x: collider.offset.x, y: collider.offset.y, width: collider.size!.width, height: collider.size!.height }));
+  const currentOcclusionZones = typeof legacyRoomId === "string" && legacyRoomId in HUB_MAPS ? mapOcclusionZones[legacyRoomId as HubMapId] : [];
 
   const editableCurrentMap = useMemo(
     () => ({ ...currentMap, colliders: currentColliders, occlusionZones: currentOcclusionZones }),
@@ -442,6 +445,7 @@ export default function Hub() {
             width: mapDimensions.width,
             height: mapDimensions.height,
             transform: mapTransform,
+            backgroundColor: runtimeRoom?.backgroundColor,
           }}
           onPointerDown={handleMapPointerDown}
           onPointerMove={handleMapPointerMove}
