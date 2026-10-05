@@ -1,13 +1,13 @@
-import { useEffect, useMemo, type DragEvent, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGameStore, type OwnedCard } from "../useGameStore";
 import TiltCard from "../components/TiltCard";
 import type { CardEdition, CardRarity } from "../game/types";
 
 type CardItem = OwnedCard;
+type InventoryView = "collection" | "craft";
 
 let pendingMarkSeenTimer: number | null = null;
-
 const CRAFT_COST = 10;
 
 const CRAFT_RARITY_CHAIN = [
@@ -36,23 +36,19 @@ const RARITY_LABELS: Record<string, string> = {
   archaic: "Архаичные",
 };
 
-const NEXT_RARITY_LABELS: Record<string, string> = {
-  common: "редкую",
-  rare: "эпическую",
-  epic: "мифическую",
-  mythic: "легендарную",
-  legendary: "хроматическую",
-  chromatic: "экзотическую",
-  exotic: "божественную",
-  divine: "забытую",
-  forgotten: "архаичную",
-};
-
 function normalizeRarity(rarity?: string): CardRarity {
-  const normalized = String(rarity ?? "common").trim().toLowerCase();
-  return (CRAFT_RARITY_CHAIN as readonly string[]).includes(normalized)
-    ? (normalized as CardRarity)
+  const value = String(rarity ?? "common").trim().toLowerCase();
+  return (CRAFT_RARITY_CHAIN as readonly string[]).includes(value)
+    ? (value as CardRarity)
     : "common";
+}
+
+function rarityClass(rarity?: string) {
+  return `rarity-${normalizeRarity(rarity)}`;
+}
+
+function rarityLabel(rarity: string) {
+  return RARITY_LABELS[rarity] ?? rarity;
 }
 
 function nextRarityOf(rarity: string) {
@@ -60,32 +56,8 @@ function nextRarityOf(rarity: string) {
   return index >= 0 ? CRAFT_RARITY_CHAIN[index + 1] ?? null : null;
 }
 
-function rarityLabel(rarity: string) {
-  return RARITY_LABELS[rarity] ?? rarity;
-}
-
-function nextRarityLabel(rarity: string) {
-  return NEXT_RARITY_LABELS[rarity] ?? rarity;
-}
-
-function rarityClass(rarity?: string) {
-  const value = normalizeRarity(rarity);
-
-  if (value.includes("archaic") || value.includes("арха")) return "rarity-archaic";
-  if (value.includes("forgotten") || value.includes("забыт")) return "rarity-forgotten";
-  if (value.includes("divine") || value.includes("боже")) return "rarity-divine";
-  if (value.includes("exotic") || value.includes("экзот")) return "rarity-exotic";
-  if (value.includes("chromatic") || value.includes("хром")) return "rarity-chromatic";
-  if (value.includes("mythic") || value.includes("миф")) return "rarity-mythic";
-  if (value.includes("legendary") || value.includes("леген")) return "rarity-legendary";
-  if (value.includes("epic") || value.includes("эпич")) return "rarity-epic";
-  if (value.includes("rare") || value.includes("редк")) return "rarity-rare";
-  return "rarity-common";
-}
-
 export default function Inventory() {
   const nav = useNavigate();
-
   const owned = useGameStore((s) => s.ownedCards);
   const deckIds = useGameStore((s) => s.deckIds);
   const addToDeck = useGameStore((s) => s.addToDeck);
@@ -93,9 +65,10 @@ export default function Inventory() {
   const markAllCardsAsSeen = useGameStore((s) => s.markAllCardsAsSeen);
 
   const cards = useMemo<CardItem[]>(() => [...owned], [owned]);
-
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [funnelHover, setFunnelHover] = useState(false);
+  const [view, setView] = useState<InventoryView>("collection");
+  const [query, setQuery] = useState("");
+  const [rarity, setRarity] = useState("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [craftMessage, setCraftMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -103,7 +76,6 @@ export default function Inventory() {
       window.clearTimeout(pendingMarkSeenTimer);
       pendingMarkSeenTimer = null;
     }
-
     return () => {
       pendingMarkSeenTimer = window.setTimeout(() => {
         markAllCardsAsSeen();
@@ -112,214 +84,199 @@ export default function Inventory() {
     };
   }, [markAllCardsAsSeen]);
 
+  const selected = cards.find((card) => card.instanceId === selectedId) ?? null;
+
+  const filteredCards = useMemo(() => {
+    const q = query.trim().toLocaleLowerCase("ru");
+    return cards.filter((card) => {
+      if (rarity !== "all" && normalizeRarity(card.rarity) !== rarity) return false;
+      if (!q) return true;
+      return [card.title, card.baseId, card.instanceId]
+        .some((value) => String(value ?? "").toLocaleLowerCase("ru").includes(q));
+    });
+  }, [cards, query, rarity]);
+
   const craftRows = useMemo(() => {
     const counts: Record<string, { serial: number; foil: number }> = {};
-
-    for (const rarity of CRAFT_RARITY_CHAIN) {
-      counts[rarity] = { serial: 0, foil: 0 };
-    }
+    for (const rarityName of CRAFT_RARITY_CHAIN) counts[rarityName] = { serial: 0, foil: 0 };
 
     for (const card of cards) {
-      const rarity = normalizeRarity(card.rarity);
-      if (!counts[rarity]) continue;
-
-      if (card.edition === "foil_serial" || card.isFoil) {
-        counts[rarity].foil += 1;
-      } else {
-        counts[rarity].serial += 1;
-      }
+      const rarityName = normalizeRarity(card.rarity);
+      if (card.edition === "foil_serial" || card.isFoil) counts[rarityName].foil += 1;
+      else counts[rarityName].serial += 1;
     }
 
-    return CRAFT_RARITY_CHAIN.slice(0, -1).flatMap((rarity) => {
-      const nextRarity = nextRarityOf(rarity);
-      const rowCounts = counts[rarity] ?? { serial: 0, foil: 0 };
-
-      return [
-        {
-          rarity,
-          nextRarity,
-          edition: "serial" as CardEdition,
-          title: "Serial",
-          count: rowCounts.serial,
-          canCraft: rowCounts.serial >= CRAFT_COST && Boolean(nextRarity),
-        },
-        {
-          rarity,
-          nextRarity,
-          edition: "foil_serial" as CardEdition,
-          title: "Foil Serial",
-          count: rowCounts.foil,
-          canCraft: rowCounts.foil >= CRAFT_COST && Boolean(nextRarity),
-        },
-      ];
-    });
+    return CRAFT_RARITY_CHAIN.slice(0, -1).map((rarityName) => ({
+      rarity: rarityName,
+      nextRarity: nextRarityOf(rarityName),
+      serial: counts[rarityName].serial,
+      foil: counts[rarityName].foil,
+    }));
   }, [cards]);
 
-  function onDragStart(e: DragEvent<HTMLDivElement>, card: CardItem) {
-    setDraggingId(card.instanceId);
-    e.dataTransfer.setData("text/plain", card.instanceId);
-    e.dataTransfer.effectAllowed = "move";
-  }
-
-  function onDragEnd() {
-    setDraggingId(null);
-    setFunnelHover(false);
-  }
-
-  function onFunnelDragOver(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setFunnelHover(true);
-  }
-
-  function onFunnelDragLeave() {
-    setFunnelHover(false);
-  }
-
-  function onFunnelDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setFunnelHover(false);
-
-    const instanceId = e.dataTransfer.getData("text/plain");
-    if (!instanceId) return;
-
-    const card = cards.find((c) => c.instanceId === instanceId);
-    if (!card) return;
-
-    addToDeck(card.instanceId);
-    setDraggingId(null);
-  }
-
-  function handleCraft(rarity: CardRarity, edition: CardEdition) {
-    const crafted = craftCardsByRarity(rarity, edition);
-
+  function handleCraft(rarityName: CardRarity, edition: CardEdition) {
+    const crafted = craftCardsByRarity(rarityName, edition);
     if (!crafted) {
-      const nextRarity = nextRarityOf(rarity);
-      const editionLabel = edition === "foil_serial" ? "Foil Serial" : "Serial";
-
-      setCraftMessage(
-        nextRarity
-          ? `Нельзя скрафтить ${editionLabel} ${nextRarityLabel(rarity)} карту: нужно 10 карт этой же серии и редкости.`
-          : "Эту редкость нельзя улучшить дальше."
-      );
+      setCraftMessage("Недостаточно карт: нужно 10 карт одной редкости и одной серии.");
       return;
     }
+    setCraftMessage(`Готово: ${crafted.title} · ${rarityLabel(normalizeRarity(crafted.rarity))}`);
+  }
 
-    setCraftMessage(
-      `Скрафчено: ${crafted.title} → ${rarityLabel(normalizeRarity(crafted.rarity))}${
-        crafted.isFoil ? " / FOIL SERIAL" : " / SERIAL"
-      }`
-    );
+  function addSelectedToDeck() {
+    if (!selected) return;
+    addToDeck(selected.instanceId);
+    setSelectedId(null);
   }
 
   return (
-    <div className="invRoot">
-      <div className="invTopRow">
-        <button className="invDeckBtn" onClick={() => nav("/deck")}>
+    <div className="invRoot invRootV2">
+      <header className="invV2Header">
+        <div>
+          <span>КОЛЛЕКЦИЯ FRAKTUM</span>
+          <h1>Инвентарь</h1>
+        </div>
+        <button className="invDeckBtn" type="button" onClick={() => nav("/deck")}>
           КОЛОДА <span className="invDeckCount">{deckIds.length}</span>
         </button>
+      </header>
 
-        <div
-          className={`invFunnel ${funnelHover ? "isHover" : ""}`}
-          title="Перетащи карту сюда, чтобы добавить в колоду"
-          onDragOver={onFunnelDragOver}
-          onDragLeave={onFunnelDragLeave}
-          onDrop={onFunnelDrop}
+      <nav className="invV2Tabs" aria-label="Разделы инвентаря">
+        <button
+          type="button"
+          className={view === "collection" ? "is-active" : ""}
+          onClick={() => setView("collection")}
         >
-          <div className="invFunnelInner" />
-          <div className="invFunnelHint">воронка</div>
-        </div>
-      </div>
+          КОЛЛЕКЦИЯ
+        </button>
+        <button
+          type="button"
+          className={view === "craft" ? "is-active" : ""}
+          onClick={() => setView("craft")}
+        >
+          КРАФТ
+        </button>
+      </nav>
 
-      <section className="invCraftPanel">
-        <div className="invCraftHead">
-          <div>
-            <strong>КРАФТ КАРТ</strong>
-            <span>10 карт одной редкости → 1 карта следующей редкости. Serial и Foil Serial крафтятся отдельно.</span>
+      {view === "collection" ? (
+        <>
+          <div className="invV2Toolbar">
+            <label className="invSearch">
+              <span>ПОИСК</span>
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Название карты"
+                inputMode="search"
+              />
+            </label>
+            <label className="invRarityFilter">
+              <span>РЕДКОСТЬ</span>
+              <select value={rarity} onChange={(event) => setRarity(event.target.value)}>
+                <option value="all">Все</option>
+                {CRAFT_RARITY_CHAIN.map((rarityName) => (
+                  <option key={rarityName} value={rarityName}>{rarityLabel(rarityName)}</option>
+                ))}
+              </select>
+            </label>
+            <div className="invV2Count">{filteredCards.length} карт</div>
           </div>
-        </div>
 
-        <div className="invCraftGrid">
-          {craftRows.map((row) => (
-            <button
-              key={`${row.rarity}-${row.edition}`}
-              type="button"
-              className={`invCraftBtn ${row.canCraft ? "canCraft" : ""} ${
-                row.edition === "foil_serial" ? "isFoilCraft" : ""
-              }`}
-              disabled={!row.canCraft}
-              onClick={() => handleCraft(row.rarity, row.edition)}
-              title={
-                row.nextRarity
-                  ? `Скрафтить ${row.title} ${nextRarityLabel(row.rarity)} карту`
-                  : "Последняя редкость"
-              }
-            >
-              <strong>
-                {row.title} · {rarityLabel(row.rarity)}
-              </strong>
-              <span>
-                {row.count}/{CRAFT_COST} → {row.nextRarity ? rarityLabel(row.nextRarity) : "MAX"}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {craftMessage ? <div className="invCraftMessage">{craftMessage}</div> : null}
-      </section>
-
-      <div className="invTablet invTablet--clean">
-        <div className="invScrollArea">
-          <div className="invGrid">
-            {cards.length === 0 ? (
-              <div style={{ opacity: 0.7, padding: 12 }}>
-                Инвентарь пуст — открой пак в магазине.
-              </div>
-            ) : (
-              cards.map((c) => {
-                const isFoil = Boolean(c.isFoil);
-
+          <div className="invTablet invTablet--clean invTabletV2">
+            <div className="invGrid invGridV2">
+              {filteredCards.length === 0 ? (
+                <div className="invEmptyV2">Ничего не найдено.</div>
+              ) : filteredCards.map((card) => {
+                const isFoil = Boolean(card.isFoil || card.edition === "foil_serial");
                 return (
-                  <div
-                    key={c.instanceId}
-                    className={`invCard ${draggingId === c.instanceId ? "isDragging" : ""} ${isFoil ? "hasFoil" : ""}`}
-                    draggable
-                    onDragStart={(e) => onDragStart(e, c)}
-                    onDragEnd={onDragEnd}
-                    onDoubleClick={() => addToDeck(c.instanceId)}
-                    title={isFoil ? `${c.title} · FOIL SERIAL` : c.title}
+                  <button
+                    key={card.instanceId}
+                    type="button"
+                    className={`invCard invCardV2 ${isFoil ? "hasFoil" : ""}`}
+                    onClick={() => setSelectedId(card.instanceId)}
+                    aria-label={card.title}
                   >
-                    <div className={`invCardVisual ${rarityClass(c.rarity)} ${isFoil ? "hasFoil" : ""}`}>
+                    <div className={`invCardVisual ${rarityClass(card.rarity)} ${isFoil ? "hasFoil" : ""}`}>
                       <TiltCard
-                        rarity={normalizeRarity(c.rarity)}
+                        rarity={normalizeRarity(card.rarity)}
                         isFoil={isFoil}
-                        maskSrc={c.frontSrc}
+                        maskSrc={card.frontSrc}
                         className="invTiltCard"
                       >
-                        <img className="invCardImg" src={c.frontSrc} alt={c.title} draggable={false} />
-
-                        {isFoil ? <div className="foilBadge">FOIL SERIAL</div> : null}
-
-                        {typeof c.marketValue === "number" ? (
-                          <div className="cardValueBadge">₵ {c.marketValue.toLocaleString("ru-RU")}</div>
-                        ) : null}
-
-                        {c.isNew ? <div className="invNewBadge">NEW</div> : null}
-
-                        <div className="invInstanceId">{c.instanceId}</div>
+                        <img className="invCardImg" src={card.frontSrc} alt={card.title} draggable={false} />
+                        {isFoil ? <div className="foilBadge">FOIL</div> : null}
+                        {card.isNew ? <div className="invNewBadge">NEW</div> : null}
                       </TiltCard>
                     </div>
-                  </div>
+                    <span className="invCardTitleV2">{card.title}</span>
+                  </button>
                 );
-              })
-            )}
+              })}
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      ) : (
+        <section className="invCraftPanel invCraftPanelV2">
+          <div className="invCraftHead">
+            <div>
+              <strong>КРАФТ КАРТ</strong>
+              <span>10 одинаковых по серии карт одной редкости → 1 карта следующей редкости.</span>
+            </div>
+          </div>
 
-      <button className="invBackBtn" onClick={() => nav("/")}>
-        НАЗАД В МЕНЮ
-      </button>
+          <div className="invCraftListV2">
+            {craftRows.map((row) => (
+              <article key={row.rarity} className="invCraftRowV2">
+                <div className="invCraftRarityV2">
+                  <strong>{rarityLabel(row.rarity)}</strong>
+                  <span>→ {row.nextRarity ? rarityLabel(row.nextRarity) : "MAX"}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={row.serial < CRAFT_COST}
+                  onClick={() => handleCraft(row.rarity, "serial")}
+                >
+                  SERIAL <b>{row.serial}/{CRAFT_COST}</b>
+                </button>
+                <button
+                  type="button"
+                  className="isFoilCraft"
+                  disabled={row.foil < CRAFT_COST}
+                  onClick={() => handleCraft(row.rarity, "foil_serial")}
+                >
+                  FOIL <b>{row.foil}/{CRAFT_COST}</b>
+                </button>
+              </article>
+            ))}
+          </div>
+
+          {craftMessage ? <div className="invCraftMessage">{craftMessage}</div> : null}
+        </section>
+      )}
+
+      {selected ? (
+        <div className="invCardSheetScrim" role="presentation" onClick={() => setSelectedId(null)}>
+          <section
+            className="invCardSheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={selected.title}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button className="invSheetClose" type="button" onClick={() => setSelectedId(null)} aria-label="Закрыть">×</button>
+            <img src={selected.frontSrc} alt={selected.title} />
+            <div className="invSheetInfo">
+              <span>{rarityLabel(normalizeRarity(selected.rarity))}{selected.isFoil ? " · FOIL" : ""}</span>
+              <h2>{selected.title}</h2>
+              <small>{selected.instanceId}</small>
+              <div className="invSheetActions">
+                <button type="button" className="is-primary" onClick={addSelectedToDeck}>ДОБАВИТЬ В КОЛОДУ</button>
+                <button type="button" onClick={() => nav("/deck")}>ОТКРЫТЬ КОЛОДУ</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
