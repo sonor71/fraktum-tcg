@@ -1,0 +1,105 @@
+.clubsPage {
+  width: min(980px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 36px 0 60px;
+  color: #e8edff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.clubsHeader {
+  padding: 24px;
+  border: 3px solid #303d66;
+  background: #0d1428;
+  box-shadow: 5px 5px 0 #02040b;
+}
+
+.clubsHeader p {
+  margin: 0 0 6px;
+  color: #9b7ee8;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 3px;
+}
+
+.clubsHeader h1 {
+  margin: 0;
+  color: #f4e6aa;
+  font-size: 34px;
+  text-transform: uppercase;
+}
+
+.clubsHeader span {
+  display: block;
+  margin-top: 8px;
+  color: #96a4c6;
+  font-size: 13px;
+}
+
+.clubsTabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.clubsTab {
+  min-height: 48px;
+  border: 2px solid #283557;
+  border-radius: 0;
+  background: #0a1123;
+  color: #aab6d4;
+  cursor: pointer;
+  font: 800 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-transform: uppercase;
+  box-shadow: 3px 3px 0 #02040b;
+}
+
+.clubsTab:hover,
+.clubsTab.is-active {
+  border-color: #8d6fda;
+  background: #171d39;
+  color: #f0e7ff;
+}
+
+.clubsPanel {
+  min-height: 300px;
+  margin-top: 12px;
+  padding: 28px;
+  border: 3px solid #283557;
+  background: #090f20;
+  box-shadow: 5px 5px 0 #02040b;
+}
+
+.clubsPanel h2 {
+  margin: 0;
+  color: #f2df9a;
+  font-size: 24px;
+}
+
+.clubsPanel p {
+  max-width: 680px;
+  color: #9ba8c7;
+  line-height: 1.6;
+}
+
+.clubsPlaceholder {
+  display: grid;
+  min-height: 160px;
+  margin-top: 24px;
+  place-items: center;
+  border: 2px dashed #465680;
+  background:
+    linear-gradient(90deg, transparent 15px, rgba(126, 98, 205, .08) 16px),
+    linear-gradient(transparent 15px, rgba(126, 98, 205, .08) 16px),
+    #0b1225;
+  background-size: 16px 16px;
+  color: #7767a8;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+@media (max-width: 680px) {
+  .clubsTabs {
+    grid-template-columns: 1fr;
+  }
+}

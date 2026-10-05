@@ -1,0 +1,153 @@
+.coreMenuRoot {
+  position: relative;
+  min-height: calc(100vh - 68px);
+  overflow: hidden;
+  padding: 42px 20px 56px;
+  background: #070b18;
+}
+
+.coreMenuBackdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.72;
+  background:
+    linear-gradient(90deg, transparent 31px, rgba(107, 82, 176, 0.08) 32px),
+    linear-gradient(transparent 31px, rgba(107, 82, 176, 0.08) 32px),
+    linear-gradient(180deg, #12182f 0%, #090d1d 58%, #050813 100%);
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+.coreMenuPanel {
+  position: relative;
+  z-index: 1;
+  width: min(920px, 100%);
+  margin: 0 auto;
+  padding: 28px;
+  border: 4px solid #28365f;
+  background: rgba(7, 12, 27, 0.94);
+  box-shadow: 8px 8px 0 #02040b, inset 0 0 0 2px #111b38;
+}
+
+.coreMenuHeading {
+  margin-bottom: 26px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.coreMenuHeading p {
+  margin: 0 0 8px;
+  color: #a989ff;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 4px;
+}
+
+.coreMenuHeading h1 {
+  margin: 0;
+  color: #f5e8aa;
+  font-size: clamp(24px, 4vw, 42px);
+  line-height: 1.1;
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 #372a66;
+}
+
+.coreMenuHeading span {
+  display: block;
+  max-width: 700px;
+  margin: 12px auto 0;
+  color: #9aa7c8;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.coreMenuGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.coreMenuAction,
+.coreMenuSettings {
+  cursor: pointer;
+  border-radius: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-align: left;
+}
+
+.coreMenuAction {
+  min-height: 104px;
+  padding: 18px;
+  border: 3px solid #2d3a62;
+  background: #0d152b;
+  color: #e8edff;
+  box-shadow: 4px 4px 0 #02040b;
+  transition: transform 100ms ease, border-color 100ms ease, background 100ms ease;
+}
+
+.coreMenuAction:hover {
+  transform: translate(-2px, -2px);
+  border-color: #8867dc;
+  background: #151d39;
+}
+
+.coreMenuAction.is-primary {
+  grid-column: 1 / -1;
+  border-color: #d1a34d;
+  background: #2a1c17;
+  box-shadow: 5px 5px 0 #5e3d25;
+}
+
+.coreMenuAction.is-primary:hover {
+  border-color: #ffd36e;
+  background: #382218;
+}
+
+.coreMenuAction strong {
+  display: block;
+  color: #f4e6b0;
+  font-size: 20px;
+  letter-spacing: 1px;
+}
+
+.coreMenuAction span {
+  display: block;
+  margin-top: 7px;
+  color: #97a5ca;
+  font-size: 12px;
+}
+
+.coreMenuSettings {
+  display: block;
+  margin: 20px auto 0;
+  padding: 10px 18px;
+  border: 2px solid #293555;
+  background: #0a1021;
+  color: #8f9dbc;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.coreMenuSettings:hover {
+  border-color: #7760bd;
+  color: #e6ddff;
+}
+
+@media (max-width: 640px) {
+  .coreMenuRoot {
+    padding: 22px 12px 36px;
+  }
+
+  .coreMenuPanel {
+    padding: 18px;
+  }
+
+  .coreMenuGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .coreMenuAction.is-primary {
+    grid-column: auto;
+  }
+}
