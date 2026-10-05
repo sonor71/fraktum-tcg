@@ -1,0 +1,778 @@
+/* FRAKTUM UX V2
+   Goal: gameplay first. One primary task per screen, compact navigation,
+   touch-friendly controls, no desktop UI squeezed into a phone. */
+
+.matchMobileHud { display: none; }
+
+/* ---------- Inventory V2 ---------- */
+.invRootV2 {
+  align-items: stretch;
+  width: min(1240px, 100%);
+  margin: 0 auto;
+  gap: 14px;
+}
+
+.invV2Header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 6px 2px 0;
+}
+
+.invV2Header > div { min-width: 0; }
+.invV2Header span {
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+.invV2Header h1 {
+  margin: 3px 0 0;
+  font-size: clamp(30px, 5vw, 54px);
+  line-height: .95;
+}
+
+.invV2Header .invDeckBtn {
+  grid-column: auto;
+  flex: 0 0 auto;
+  min-height: 48px;
+  padding: 0 18px;
+}
+
+.invV2Tabs {
+  display: flex;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 14px;
+  background: rgba(0,0,0,.20);
+}
+
+.invV2Tabs button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: .09em;
+  cursor: pointer;
+}
+
+.invV2Tabs button.is-active {
+  color: #fff;
+  border-color: rgba(125,234,255,.30);
+  background: linear-gradient(180deg, rgba(72,147,182,.24), rgba(73,44,129,.30));
+}
+
+.invV2Toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 230px) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.invSearch,
+.invRarityFilter {
+  display: grid;
+  gap: 5px;
+}
+.invSearch > span,
+.invRarityFilter > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+.invSearch input,
+.invRarityFilter select {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 12px;
+  outline: none;
+  color: #fff;
+  background: rgba(3,8,16,.82);
+}
+.invSearch input:focus,
+.invRarityFilter select:focus {
+  border-color: rgba(125,234,255,.40);
+  box-shadow: 0 0 0 3px rgba(125,234,255,.08);
+}
+
+.invV2Count {
+  min-height: 46px;
+  display: grid;
+  place-items: center;
+  padding: 0 13px;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 12px;
+  color: var(--muted);
+  background: rgba(255,255,255,.035);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.invTabletV2 {
+  width: 100%;
+  padding: 12px;
+  border-radius: 20px;
+}
+
+.invGridV2 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.invCardV2 {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: auto;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.invCardV2 .invCardVisual {
+  aspect-ratio: 29 / 40;
+}
+
+.invCardV2:active .invCardVisual {
+  transform: scale(.985);
+}
+
+.invCardTitleV2 {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(238,246,255,.88);
+  font-size: 11px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.invEmptyV2 {
+  grid-column: 1 / -1;
+  padding: 42px 16px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.invCraftPanelV2 {
+  width: 100%;
+  padding: 14px;
+}
+
+.invCraftListV2 {
+  display: grid;
+  gap: 8px;
+}
+
+.invCraftRowV2 {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, 180px) minmax(130px, 180px);
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 13px;
+  background: rgba(255,255,255,.025);
+}
+
+.invCraftRarityV2 {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.invCraftRarityV2 strong { font-size: 13px; }
+.invCraftRarityV2 span { color: var(--muted); font-size: 10px; }
+
+.invCraftRowV2 button {
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid rgba(125,234,255,.18);
+  border-radius: 10px;
+  color: #eefbff;
+  background: rgba(61,102,140,.16);
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+.invCraftRowV2 button b { margin-left: 7px; color: var(--gold); }
+.invCraftRowV2 button.isFoilCraft { border-color: rgba(255,127,220,.22); }
+.invCraftRowV2 button:disabled { opacity: .34; cursor: not-allowed; }
+
+.invCardSheetScrim {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: grid;
+  place-items: end center;
+  padding: 18px;
+  background: rgba(1,3,8,.74);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.invCardSheet {
+  position: relative;
+  width: min(620px, 100%);
+  display: grid;
+  grid-template-columns: minmax(130px, 190px) minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(139,233,255,.22);
+  border-radius: 22px;
+  background: linear-gradient(150deg, #0e1727, #080b15);
+  box-shadow: 0 24px 70px rgba(0,0,0,.62);
+}
+
+.invCardSheet > img {
+  width: 100%;
+  aspect-ratio: 29 / 40;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.invSheetInfo {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  min-width: 0;
+}
+.invSheetInfo > span { color: var(--gold); font-size: 10px; font-weight: 900; letter-spacing: .12em; }
+.invSheetInfo h2 { margin: 0; font-size: clamp(22px, 5vw, 34px); }
+.invSheetInfo small { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+
+.invSheetActions {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+.invSheetActions button {
+  min-height: 46px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 11px;
+  color: #fff;
+  background: rgba(255,255,255,.05);
+  font-weight: 900;
+  cursor: pointer;
+}
+.invSheetActions button.is-primary {
+  color: #0d1016;
+  border-color: #e8c268;
+  background: linear-gradient(180deg, #ffe08b, #bd7d2c);
+}
+
+.invSheetClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0,0,0,.68);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+/* ---------- Arena mode selection V2 ---------- */
+.playRootV2 {
+  width: min(1050px, 100%);
+  margin: 0 auto;
+  gap: 18px;
+}
+.playHeaderV2 { padding-top: 8px; }
+.playDeckStatus {
+  display: inline-grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  margin-top: 6px;
+  padding: 0 13px;
+  border: 1px solid rgba(255,198,102,.18);
+  border-radius: 999px;
+  color: #e7edf9;
+  background: rgba(0,0,0,.20);
+  cursor: pointer;
+}
+.playDeckStatus span,
+.playDeckStatus small { color: var(--muted); font-size: 9px; font-weight: 900; letter-spacing: .08em; }
+.playDeckStatus b { color: var(--gold); }
+.playDeckStatus.is-ready { border-color: rgba(96,239,170,.28); }
+.playDeckStatus.is-ready small { color: #86f1ba; }
+
+.playGridV2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.playCardV2 { min-height: 250px; }
+.playCardV2 .playCardInner { padding: 24px; }
+.playCardV2 .playModeDescription { max-width: 36ch; }
+.playCardV2.is-ranked { border-color: rgba(165,127,255,.20); }
+
+/* ---------- Deck builder touch usability ---------- */
+.deckMiniCard {
+  touch-action: manipulation;
+}
+.deckMiniCard:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* ---------- Match V2 ---------- */
+.matchBoardSlot[role="button"] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.matchBoardSlot[role="button"]:active {
+  transform: scale(.985);
+}
+
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1000px) {
+  :root {
+    --card-hand-w: 66px;
+    --card-hand-h: 92px;
+    --card-board-w: 58px;
+    --card-board-h: 81px;
+  }
+
+  html,
+  body,
+  #root {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .matchPage {
+    width: 100vw;
+    height: 100dvh;
+    min-height: 100dvh;
+    padding:
+      env(safe-area-inset-top)
+      env(safe-area-inset-right)
+      env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+    overflow: hidden;
+    background: #020104;
+  }
+
+  .matchBackdrop { opacity: .24; }
+
+  .matchArenaShell {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .matchArenaFrame { opacity: .56; }
+
+  .matchHeader {
+    z-index: 120;
+    top: calc(env(safe-area-inset-top) + 5px);
+    left: calc(env(safe-area-inset-left) + 5px);
+    height: 36px;
+    gap: 0;
+  }
+  .matchHeader > div { display: none; }
+  .matchBackButton {
+    min-width: 88px;
+    min-height: 36px;
+    padding: 7px 10px;
+    border-radius: 10px;
+    font-size: 10px;
+    background: rgba(8,6,13,.90);
+  }
+
+  .matchArenaTopbar,
+  .matchOpponentProfile,
+  .matchEnemyArc,
+  .matchSideColumn,
+  .matchLogZone,
+  .matchEnemyPiles,
+  .matchPlayerPiles,
+  .matchPlayerWillZone {
+    display: none !important;
+  }
+
+  .matchMobileHud {
+    position: absolute;
+    z-index: 18;
+    top: 1.6%;
+    left: 13%;
+    right: 1.4%;
+    height: 12.5%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(115px, .72fr) minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .matchMobileHudSide,
+  .matchMobileHudCenter {
+    min-width: 0;
+    display: grid;
+    align-content: center;
+    gap: 1px;
+    padding: 4px 8px;
+    border: 1px solid rgba(215,163,72,.26);
+    border-radius: 9px;
+    background: rgba(8,6,13,.86);
+    box-shadow: 0 7px 18px rgba(0,0,0,.26);
+  }
+
+  .matchMobileHudSide.is-player { text-align: right; }
+  .matchMobileHudCenter {
+    text-align: center;
+    border-color: rgba(139,85,255,.46);
+    background: rgba(40,20,62,.76);
+  }
+
+  .matchMobileHud span,
+  .matchMobileHud small {
+    min-width: 0;
+    overflow: hidden;
+    color: rgba(255,231,184,.65);
+    font-size: clamp(7px, 1.4vh, 9px);
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .matchMobileHud b {
+    min-width: 0;
+    overflow: hidden;
+    color: #fff4d7;
+    font-size: clamp(9px, 2.1vh, 12px);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .matchFieldZone {
+    left: 1.4%;
+    top: 15.5%;
+    width: 97.2%;
+    height: 53.5%;
+    grid-template-rows: 24px minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .matchFieldZone > .matchWillStrip {
+    min-height: 24px;
+    height: 24px;
+    grid-template-columns: 72px minmax(0, 1fr) 36px;
+    gap: 6px;
+    padding: 2px 7px;
+    border-radius: 7px;
+  }
+  .matchFieldZone > .matchWillStrip .matchWillTrack { height: 9px; }
+  .matchFieldZone > .matchWillStrip .matchWillLabel,
+  .matchFieldZone > .matchWillStrip b { font-size: 8px; }
+
+  .matchBoardPanel {
+    padding: 5px 7px;
+    border-radius: 12px;
+    grid-template-rows: 1fr 16px 1fr;
+    gap: 4px;
+  }
+  .matchBoardPanel::before { inset: 4px; border-radius: 9px; }
+
+  .matchBoardRow {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 5px;
+  }
+  .matchBoardSlot {
+    min-width: 0;
+    border-radius: 8px;
+  }
+  .matchBoardSlot:hover { transform: none; }
+  .matchSlotNumber { font-size: 12px; }
+  .matchSlotHint { font-size: 6px; }
+  .matchBoardDivider { min-height: 14px; }
+  .matchBoardDivider b { font-size: 7px; letter-spacing: .18em; }
+
+  .matchPlayerHandZone {
+    left: 13.5%;
+    bottom: 0;
+    width: 70%;
+    height: 29.5%;
+    overflow: visible;
+    border-top-color: rgba(215,163,72,.34);
+  }
+  .matchPlayerHandZone::before { bottom: -32%; height: 94%; }
+
+  .playerHandCard {
+    width: var(--card-hand-w);
+    height: var(--card-hand-h);
+    margin-left: calc(var(--card-hand-w) / -2);
+    margin-top: calc(var(--card-hand-h) / -2);
+  }
+  .playerHandCard.is-selected {
+    filter: drop-shadow(0 0 12px rgba(255,210,104,.75));
+  }
+  .matchCardView {
+    border-radius: 7px;
+    box-shadow: 0 9px 18px rgba(0,0,0,.46);
+  }
+
+  .matchD20Zone {
+    left: 1.3%;
+    bottom: 1.5%;
+    width: 11.5%;
+    height: 27%;
+    border-radius: 12px;
+  }
+  .matchD20 {
+    width: min(88px, 95%);
+    border-radius: 18px;
+  }
+  .matchD20Label { top: 7%; font-size: 7px; }
+  .matchD20Hint { display: none; }
+
+  .matchPlayerActionZone {
+    right: 1.3%;
+    bottom: 1.5%;
+    width: 14%;
+    height: 27%;
+    align-content: end;
+    gap: 5px;
+  }
+  .matchActionStatus,
+  .matchPlayerActionZone .is-restart,
+  .matchPlayerActionZone .is-danger {
+    display: none !important;
+  }
+  .matchActionRow {
+    display: grid;
+    width: 100%;
+  }
+  .matchPlayerActionZone .is-end-turn {
+    display: block !important;
+    min-height: 58px;
+    padding: 8px 6px;
+    border-radius: 12px;
+    border-color: rgba(255,208,105,.58);
+    color: #190f06;
+    background: linear-gradient(180deg, #f3c967, #9b601c);
+    font-size: 10px;
+    font-weight: 950;
+    line-height: 1.1;
+  }
+  .matchPlayerActionZone .is-end-turn:disabled {
+    color: rgba(255,255,255,.44);
+    border-color: rgba(255,255,255,.12);
+    background: rgba(255,255,255,.05);
+  }
+
+  .matchRouletteNotice {
+    top: 14%;
+    min-width: 190px;
+    padding: 4px 10px;
+  }
+
+  .matchPresentationOverlay {
+    padding:
+      env(safe-area-inset-top)
+      env(safe-area-inset-right)
+      env(safe-area-inset-bottom)
+      env(safe-area-inset-left);
+  }
+  .matchTurnAnnouncementCard {
+    min-width: min(520px, 70vw);
+    padding: 12px 28px;
+  }
+  .matchRoulettePresentationCard {
+    width: min(590px, 88vw);
+    min-height: 88vh;
+    padding: 12px 20px;
+    border-radius: 16px;
+  }
+  .matchRoulettePresentationCard h2 { margin: 3px 0 6px; font-size: 28px; }
+  .matchRouletteStage { width: min(235px, 45vh); margin: 0 auto 6px; }
+  .matchRouletteSigil { width: 120px; margin: 8px auto 12px; font-size: 56px; }
+  .matchRouletteResult { min-height: 54px; }
+
+  .matchDebugToggle,
+  .matchDebugConsole { display: none !important; }
+}
+
+/* ---------- Phone portrait / app screens ---------- */
+@media (max-width: 700px) {
+  .invRootV2 { gap: 10px; }
+
+  .invV2Header {
+    align-items: center;
+    gap: 10px;
+  }
+  .invV2Header h1 { font-size: 28px; }
+  .invV2Header > div > span { font-size: 8px; }
+  .invV2Header .invDeckBtn {
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 10px;
+  }
+
+  .invV2Tabs {
+    position: sticky;
+    top: calc(58px + env(safe-area-inset-top));
+    z-index: 30;
+    padding: 4px;
+    background: rgba(7,13,27,.95);
+    backdrop-filter: blur(16px);
+  }
+  .invV2Tabs button {
+    flex: 1;
+    min-height: 42px;
+    padding: 0 8px;
+    font-size: 10px;
+  }
+
+  .invV2Toolbar {
+    grid-template-columns: minmax(0, 1fr) 132px;
+    gap: 7px;
+  }
+  .invV2Count { display: none; }
+  .invSearch > span,
+  .invRarityFilter > span { display: none; }
+
+  .invSearch input,
+  .invRarityFilter select {
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 10px;
+  }
+
+  .invTabletV2 {
+    padding: 6px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .invGridV2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .invCardTitleV2 { font-size: 10px; }
+
+  .invCraftPanelV2 {
+    padding: 8px;
+    border-radius: 14px;
+  }
+  .invCraftHead span { font-size: 10px; line-height: 1.35; }
+  .invCraftRowV2 {
+    grid-template-columns: minmax(0, 1fr) 92px 92px;
+    gap: 5px;
+    padding: 6px;
+  }
+  .invCraftRarityV2 strong { font-size: 11px; }
+  .invCraftRarityV2 span { font-size: 8px; }
+  .invCraftRowV2 button {
+    min-height: 44px;
+    padding: 5px;
+    font-size: 8px;
+  }
+  .invCraftRowV2 button b {
+    display: block;
+    margin: 3px 0 0;
+  }
+
+  .invCardSheetScrim {
+    padding:
+      10px
+      max(10px, env(safe-area-inset-right))
+      calc(10px + env(safe-area-inset-bottom))
+      max(10px, env(safe-area-inset-left));
+  }
+  .invCardSheet {
+    grid-template-columns: 120px minmax(0, 1fr);
+    gap: 12px;
+    padding: 13px;
+    border-radius: 18px;
+  }
+  .invSheetInfo h2 { font-size: 20px; }
+  .invSheetInfo small { font-size: 9px; }
+  .invSheetActions button { min-height: 44px; font-size: 9px; }
+
+  .playRootV2 { gap: 12px; padding: 8px 2px 18px; }
+  .playHeaderV2 { gap: 5px; }
+  .playHeaderV2 .playTitle { font-size: 28px; }
+  .playHeaderV2 .playLead { max-width: 34ch; font-size: 11px; line-height: 1.4; }
+  .playGridV2 {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+  .playCardV2 {
+    min-height: 0;
+    border-radius: 16px;
+  }
+  .playCardV2 .playCardInner {
+    gap: 12px;
+    padding: 16px;
+  }
+  .playCardV2 .playModeTitle { font-size: 24px; }
+  .playCardV2 .playModeDescription { margin: 6px 0 0; font-size: 11px; }
+  .playCardV2 .playActionBtn { min-height: 48px; }
+
+  .deckMiniCard {
+    width: 48px;
+    height: 48px;
+    cursor: pointer;
+  }
+  .deckMiniRow {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .deckCharSlot { height: 180px; }
+  .deckBoostSlot { height: 92px; }
+  .deckMainGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .deckLeft,
+  .deckRight {
+    padding: 9px;
+    border-radius: 14px;
+  }
+  .deckSlotInstance { display: none; }
+  .deckRemoveBtn {
+    width: 30px;
+    height: 30px;
+    top: 4px;
+    right: 4px;
+  }
+}
+
+@media (max-width: 420px) {
+  .invCardSheet {
+    grid-template-columns: 105px minmax(0, 1fr);
+  }
+  .invCraftRowV2 {
+    grid-template-columns: minmax(0, 1fr) 82px 82px;
+  }
+  .deckMainGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
