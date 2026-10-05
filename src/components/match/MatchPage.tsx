@@ -1530,7 +1530,7 @@ export default function MatchPage() {
       <main className="matchPage onlineMatchmakingPage">
         <div className="matchBackdrop" aria-hidden="true" />
         <header className="matchHeader">
-          <button className="matchBackButton" type="button" onClick={() => nav("/play")}>← Back to modes</button>
+          <button className="matchBackButton" type="button" onClick={() => nav("/play")}>← РЕЖИМЫ</button>
           <div>
             <span>Supabase PvP Beta</span>
             <h1>FRAKTUM Online</h1>
@@ -1582,8 +1582,8 @@ export default function MatchPage() {
       <header className="matchHeader">
         <button className="matchBackButton" type="button" onClick={() => nav("/play")}>← Back to modes</button>
         <div>
-          <span>{isOnlineMode ? "Online PvP Beta" : "React / TypeScript Arena"}</span>
-          <h1>{isOnlineMode ? "FRAKTUM Online Duel" : "FRAKTUM Duel"}</h1>
+          <span>{isOnlineMode ? "ONLINE PVP" : "ТРЕНИРОВКА"}</span>
+          <h1>{isOnlineMode ? "FRAKTUM PVP" : "FRAKTUM"}</h1>
         </div>
       </header>
       <MatchBoard
