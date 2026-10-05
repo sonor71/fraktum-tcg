@@ -247,6 +247,24 @@ export function MatchBoard({
         </div>
       </div>
 
+      <section className="matchMobileHud" aria-label="Mobile match status">
+        <div className="matchMobileHudSide is-enemy">
+          <span>{enemyName}</span>
+          <b>HP {state.enemy.hp}</b>
+          <small>HAND {state.enemy.hand.length} · DECK {state.enemy.deck.length}</small>
+        </div>
+        <div className="matchMobileHudCenter">
+          <span>ROUND {state.turn}</span>
+          <b>{state.activePlayerId === "player" ? "ТВОЙ ХОД" : "ХОД СОПЕРНИКА"}</b>
+          <small>{readablePhase}</small>
+        </div>
+        <div className="matchMobileHudSide is-player">
+          <span>{playerName}</span>
+          <b>HP {state.player.hp} · WILL {state.player.will}/{state.player.maxWill}</b>
+          <small>HAND {state.player.hand.length} · DECK {state.player.deck.length}</small>
+        </div>
+      </section>
+
       {state.activeRouletteEvent ? (
         <div className="matchRouletteNotice" role="status" aria-live="polite">
           <span>FATE ROULETTE</span>
@@ -306,6 +324,11 @@ export function MatchBoard({
                 index={index}
                 key={`player-${index}`}
                 valid={selectedCardIsPlayable}
+                onActivate={
+                  selectedCardIsPlayable && selectedCard
+                    ? (slotIndex) => onPlay(selectedCard.instanceId, slotIndex)
+                    : undefined
+                }
               />
             ))}
           </div>
