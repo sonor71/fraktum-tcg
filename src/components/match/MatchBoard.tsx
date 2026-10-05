@@ -351,11 +351,11 @@ export function MatchBoard({
 
         <div className="matchActionRow">
           {!isBetweenBattles ? (
-            <button className="matchGhostButton is-compact" type="button" onClick={onRestart}>
+            <button className="matchGhostButton is-compact is-restart" type="button" onClick={onRestart}>
               Restart
             </button>
           ) : null}
-          <button className="matchGhostButton is-compact" type="button" onClick={onEndTurn} disabled={!canPlay}>
+          <button className="matchGhostButton is-compact is-end-turn" type="button" onClick={onEndTurn} disabled={!canPlay}>
             End Turn
           </button>
           <button className="matchGhostButton is-compact is-danger" type="button" onClick={onConcede} disabled={Boolean(state.winner)}>
