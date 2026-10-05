@@ -294,12 +294,12 @@ export function buildDebugFilename(mode: MatchDebugMode, matchId: string, extens
 }
 
 export function isMatchDebugAllowed() {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   const params = new URLSearchParams(window.location.search);
   if (params.get("matchDebug") === "1") return true;
   if (window.localStorage.getItem("fraktum.matchDebugEnabled") === "1") return true;
   const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1" || host.endsWith(".vercel.app") || import.meta.env.DEV;
+  return host === "localhost" || host === "127.0.0.1" || import.meta.env.DEV;
 }
 
 export function makeDebugSession(input: Omit<MatchDebugSession, "schemaVersion" | "gameVersion">): MatchDebugSession {
