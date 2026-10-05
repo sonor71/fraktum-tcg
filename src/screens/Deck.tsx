@@ -345,6 +345,36 @@ export default function Deck() {
     setDeckIds([...chars, ...boostsPick, ...mainsPick].map((c) => c.id));
   }
 
+  function addPoolCard(card: Card) {
+    const snap = getSlotsSnapshot();
+    removeBaseFromKindEverywhere(snap, card.baseId, card.kind);
+
+    if (card.kind === "character") {
+      snap.charId = card.id;
+      applySlots(snap);
+      return;
+    }
+
+    if (card.kind === "boost") {
+      const index = snap.boostsIds.findIndex((id) => id === null);
+      if (index < 0) {
+        window.alert("Все слоты усилений заняты. Сначала убери одну карту.");
+        return;
+      }
+      snap.boostsIds[index] = card.id;
+      applySlots(snap);
+      return;
+    }
+
+    const index = snap.mainsIds.findIndex((id) => id === null);
+    if (index < 0) {
+      window.alert(`Основная колода уже содержит ${FRAKTUM_MAIN_DECK_SIZE} карт.`);
+      return;
+    }
+    snap.mainsIds[index] = card.id;
+    applySlots(snap);
+  }
+
   function save() {
     if (mains.length !== FRAKTUM_MAIN_DECK_SIZE) {
       alert(`Основная колода должна содержать ровно ${FRAKTUM_MAIN_DECK_SIZE} карт. Сейчас: ${mains.length}.`);
@@ -452,7 +482,7 @@ export default function Deck() {
 
         {/* пул */}
         <div className="deckDemoPool">
-          <div className="deckDemoTitle">Инвентарь (перетащи в слоты)</div>
+          <div className="deckDemoTitle">Инвентарь (тапни или перетащи)</div>
 
           <div className="deckDemoRow">
             <div className="deckDemoTag">Персонажи</div>
@@ -462,6 +492,15 @@ export default function Deck() {
                   key={c.id}
                   className={`deckMiniCard ${c.isFoil ? "isFoilMini" : ""} ${dragId === c.id ? "isDragging" : ""}`}
                   draggable
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => addPoolCard(c)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      addPoolCard(c);
+                    }
+                  }}
                   onDragStart={(e) => onDragStartPool(e, c)}
                   onDragEnd={onDragEnd}
                   title={c.isFoil ? `${c.title} · FOIL SERIAL` : c.title}
@@ -482,6 +521,15 @@ export default function Deck() {
                   key={c.id}
                   className={`deckMiniCard ${c.isFoil ? "isFoilMini" : ""} ${dragId === c.id ? "isDragging" : ""}`}
                   draggable
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => addPoolCard(c)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      addPoolCard(c);
+                    }
+                  }}
                   onDragStart={(e) => onDragStartPool(e, c)}
                   onDragEnd={onDragEnd}
                   title={c.isFoil ? `${c.title} · FOIL SERIAL` : c.title}
@@ -502,6 +550,15 @@ export default function Deck() {
                   key={c.id}
                   className={`deckMiniCard ${c.isFoil ? "isFoilMini" : ""} ${dragId === c.id ? "isDragging" : ""}`}
                   draggable
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => addPoolCard(c)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      addPoolCard(c);
+                    }
+                  }}
                   onDragStart={(e) => onDragStartPool(e, c)}
                   onDragEnd={onDragEnd}
                   title={c.isFoil ? `${c.title} · FOIL SERIAL` : c.title}
