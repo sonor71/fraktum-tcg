@@ -135,6 +135,11 @@ export function HandView({
   const startDrag = (event: PointerEvent<HTMLDivElement>, card: CardInstance) => {
     if (disabled || event.button !== 0) return;
 
+    if (event.pointerType === "touch") {
+      onSelect?.(selectedId === card.instanceId ? null : card.instanceId);
+      return;
+    }
+
     const cardElement = event.currentTarget.querySelector<HTMLElement>(".matchCardView") ?? event.currentTarget;
     const rect = cardElement.getBoundingClientRect();
 
