@@ -776,3 +776,371 @@
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 }
+
+
+/* =========================================================
+   MATCH UX V3 — actual phone-landscape layout
+   ========================================================= */
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 1100px) {
+  :root {
+    --card-board-w: clamp(38px, 14cqh, 54px);
+    --card-board-h: calc(var(--card-board-w) * 1.4);
+    --card-hand-w: clamp(58px, 21cqh, 74px);
+    --card-hand-h: calc(var(--card-hand-w) * 1.4);
+  }
+
+  .matchPage {
+    padding:
+      max(2px, env(safe-area-inset-top))
+      max(2px, env(safe-area-inset-right))
+      max(2px, env(safe-area-inset-bottom))
+      max(2px, env(safe-area-inset-left));
+  }
+
+  .matchArenaShell {
+    border-radius: 0;
+  }
+
+  /* Compact back affordance. It no longer sits on top of the opponent HUD. */
+  .matchHeader {
+    top: calc(env(safe-area-inset-top) + 4px);
+    left: calc(env(safe-area-inset-left) + 4px);
+    width: 38px;
+    height: 38px;
+  }
+  .matchBackButton {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border-radius: 9px;
+    font-size: 19px;
+    line-height: 1;
+  }
+
+  .matchMobileHud {
+    top: 1.2%;
+    left: 4.8%;
+    right: 1%;
+    height: 10.5%;
+    grid-template-columns: minmax(0, 1fr) minmax(108px, .66fr) minmax(0, 1fr);
+    gap: 5px;
+  }
+
+  .matchMobileHudSide,
+  .matchMobileHudCenter {
+    padding: 3px 7px;
+    border-radius: 8px;
+  }
+
+  .matchMobileHudSide.is-enemy {
+    padding-left: 8px;
+  }
+
+  .matchMobileHud span,
+  .matchMobileHud small {
+    font-size: clamp(6px, 1.45cqh, 8px);
+    line-height: 1.05;
+  }
+  .matchMobileHud b {
+    font-size: clamp(8px, 1.9cqh, 11px);
+    line-height: 1.05;
+  }
+
+  /* Only the actual playing surface stays in the middle. */
+  .matchFieldZone {
+    left: 1%;
+    top: 12.8%;
+    width: 98%;
+    height: 55.5%;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .matchFieldZone > .matchWillStrip {
+    display: none;
+  }
+
+  .matchBoardPanel {
+    height: 100%;
+    padding: 4px 6px;
+    border-radius: 10px;
+    grid-template-rows: minmax(0, 1fr) 12px minmax(0, 1fr);
+    gap: 3px;
+  }
+
+  .matchBoardPanel::before {
+    inset: 3px;
+    border-radius: 7px;
+  }
+
+  .matchBoardRow {
+    min-height: 0;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .matchBoardSlot {
+    min-width: 0;
+    min-height: 0;
+    border-radius: 7px;
+  }
+
+  .matchBoardSlot.is-empty {
+    background: rgba(255,255,255,.018);
+  }
+
+  .matchBoardSlot.is-drop-open {
+    border-color: rgba(255,217,132,.88);
+    box-shadow: inset 0 0 0 1px rgba(255,217,132,.24), 0 0 13px rgba(255,195,82,.16);
+  }
+
+  .matchSlotRune {
+    font-size: 18px;
+    opacity: .24;
+  }
+
+  .matchSlotNumber {
+    width: 18px;
+    height: 18px;
+    right: 4px;
+    bottom: 4px;
+    font-size: 8px;
+  }
+
+  .matchSlotHint {
+    top: 4px;
+    left: 4px;
+    padding: 1px 4px;
+    font-size: 5px;
+    letter-spacing: .06em;
+  }
+
+  .matchBoardDivider {
+    min-height: 12px;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 5px;
+  }
+  .matchBoardDivider b {
+    font-size: 6px;
+    letter-spacing: .14em;
+  }
+
+  .matchSlotCardShell {
+    width: 100%;
+    height: 100%;
+  }
+
+  .matchSlotCardShell .matchCardView.is-board {
+    width: var(--card-board-w);
+    height: var(--card-board-h);
+    max-height: 92%;
+  }
+
+  .matchSlotStateTag {
+    bottom: 2px;
+    padding: 1px 3px;
+    font-size: 6px;
+  }
+
+  .matchCardBadge {
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    font-size: 7px;
+  }
+
+  /* Bottom third = player's hand. No fan, no cards hidden below viewport. */
+  .matchPlayerHandZone {
+    left: 13%;
+    right: 13%;
+    bottom: 0;
+    width: auto;
+    height: 30.5%;
+    overflow: hidden;
+    border-top: 1px solid rgba(215,163,72,.24);
+    background:
+      linear-gradient(180deg, rgba(9,6,13,.15), rgba(22,10,30,.78));
+  }
+
+  .matchPlayerHandZone::before {
+    display: none;
+  }
+
+  .playerHandFan {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 5px 8px 4px;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    perspective: none;
+    isolation: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .playerHandFan::-webkit-scrollbar {
+    display: none;
+  }
+
+  .playerHandCard {
+    position: relative !important;
+    left: auto !important;
+    top: auto !important;
+    flex: 0 0 var(--card-hand-w);
+    width: var(--card-hand-w) !important;
+    height: var(--card-hand-h) !important;
+    margin: 0 !important;
+    transform: none !important;
+    transform-origin: center !important;
+    touch-action: pan-x;
+    scroll-snap-align: center;
+  }
+
+  .playerHandCard .matchCardView {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 7px;
+  }
+
+  .playerHandCard.is-selected {
+    z-index: 3 !important;
+    filter: none !important;
+  }
+
+  .playerHandCard.is-selected .matchCardView {
+    outline: 2px solid #ffd978 !important;
+    outline-offset: -2px;
+    box-shadow: 0 0 0 2px rgba(255,217,120,.22), 0 0 16px rgba(255,194,69,.35) !important;
+  }
+
+  /* D20 and the only primary action stay in thumb-reachable corners. */
+  .matchD20Zone {
+    left: .8%;
+    bottom: 1%;
+    width: 11.3%;
+    height: 29%;
+    border-radius: 10px;
+    background: transparent;
+  }
+
+  .matchD20 {
+    width: min(76px, 92%);
+    max-height: 92%;
+    aspect-ratio: 1;
+    border-radius: 16px;
+  }
+  .matchD20Label { top: 6%; font-size: 6px; }
+  .matchD20Hint { display: none; }
+
+  .matchPlayerActionZone {
+    right: .8%;
+    bottom: 1%;
+    width: 11.3%;
+    height: 29%;
+    display: grid;
+    align-items: end;
+  }
+
+  .matchPlayerActionZone .matchActionRow {
+    width: 100%;
+    display: grid;
+  }
+
+  .matchPlayerActionZone .is-end-turn {
+    width: 100%;
+    min-height: 54px;
+    padding: 7px 4px;
+    border-radius: 11px;
+    font-size: 9px;
+    letter-spacing: .02em;
+  }
+
+  /* Explicitly remove all non-essential desktop UI from phone matches. */
+  .matchArenaTopbar,
+  .matchOpponentProfile,
+  .matchEnemyArc,
+  .matchSideColumn,
+  .matchLogZone,
+  .matchEnemyPiles,
+  .matchPlayerPiles,
+  .matchPlayerWillZone,
+  .matchActionStatus,
+  .matchPlayerActionZone .is-restart,
+  .matchPlayerActionZone .is-danger,
+  .matchDebugToggle,
+  .matchDebugConsole {
+    display: none !important;
+  }
+
+  .matchPlayerActionZone {
+    display: grid !important;
+  }
+
+  .matchRouletteNotice {
+    top: 12%;
+    min-width: 170px;
+    padding: 3px 8px;
+  }
+
+  .matchAiThinkingVeil {
+    pointer-events: none;
+  }
+}
+
+/* Extremely short Safari viewport: prioritize interaction over decoration. */
+@media (orientation: landscape) and (max-height: 360px) and (max-width: 1100px) {
+  :root {
+    --card-board-w: 34px;
+    --card-board-h: 48px;
+    --card-hand-w: 54px;
+    --card-hand-h: 76px;
+  }
+
+  .matchMobileHud {
+    height: 11%;
+  }
+
+  .matchFieldZone {
+    top: 12.5%;
+    height: 54.5%;
+  }
+
+  .matchPlayerHandZone {
+    height: 31.5%;
+  }
+
+  .matchMobileHud small {
+    display: none;
+  }
+
+  .matchMobileHudCenter small {
+    display: block;
+  }
+
+  .matchBackButton {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
+  }
+
+  .matchD20Zone,
+  .matchPlayerActionZone {
+    width: 11.5%;
+    height: 30%;
+  }
+
+  .matchPlayerActionZone .is-end-turn {
+    min-height: 48px;
+    font-size: 8px;
+  }
+}
