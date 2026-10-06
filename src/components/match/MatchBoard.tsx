@@ -251,17 +251,17 @@ export function MatchBoard({
         <div className="matchMobileHudSide is-enemy">
           <span>{enemyName}</span>
           <b>HP {state.enemy.hp}</b>
-          <small>HAND {state.enemy.hand.length} · DECK {state.enemy.deck.length}</small>
+          <small>WILL ?/{state.enemy.maxWill} · HAND {state.enemy.hand.length}</small>
         </div>
         <div className="matchMobileHudCenter">
           <span>ROUND {state.turn}</span>
           <b>{state.activePlayerId === "player" ? "ТВОЙ ХОД" : "ХОД СОПЕРНИКА"}</b>
-          <small>{readablePhase}</small>
+          <small>{readablePhase} · D20 {state.lastRoll ?? "—"}</small>
         </div>
         <div className="matchMobileHudSide is-player">
           <span>{playerName}</span>
           <b>HP {state.player.hp} · WILL {state.player.will}/{state.player.maxWill}</b>
-          <small>HAND {state.player.hand.length} · DECK {state.player.deck.length}</small>
+          <small>DECK {state.player.deck.length} · DISCARD {state.player.discard.length}</small>
         </div>
       </section>
 
