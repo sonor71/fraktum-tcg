@@ -1580,7 +1580,7 @@ export default function MatchPage() {
     <main className="matchPage">
       <div className="matchBackdrop" aria-hidden="true" />
       <header className="matchHeader">
-        <button className="matchBackButton" type="button" onClick={() => nav("/play")}>← Back to modes</button>
+        <button className="matchBackButton" type="button" onClick={() => nav("/play")}>←</button>
         <div>
           <span>{isOnlineMode ? "ONLINE PVP" : "ТРЕНИРОВКА"}</span>
           <h1>{isOnlineMode ? "FRAKTUM PVP" : "FRAKTUM"}</h1>
