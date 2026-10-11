@@ -293,9 +293,9 @@ export function MatchBoard({
           <small>WILL ?/{state.enemy.maxWill} · HAND {state.enemy.hand.length}</small>
         </div>
         <div className="matchMobileHudCenter">
-          <span>ROUND {state.turn}</span>
+          <span>БОЙ {battleNumber}/3 · СЧЁТ {seriesScore.player}:{seriesScore.enemy}</span>
           <b>{state.activePlayerId === "player" ? "ТВОЙ ХОД" : "ХОД СОПЕРНИКА"}</b>
-          <small>{readablePhase} · D20 {state.lastRoll ?? "—"}</small>
+          <small>ХОД {state.turn} · {readablePhase} · D20 {state.lastRoll ?? "—"}</small>
         </div>
         <div className="matchMobileHudSide is-player">
           <span>{playerName}</span>
