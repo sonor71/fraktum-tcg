@@ -94,7 +94,11 @@ function onlineBackendError(error: unknown, context: string) {
     return new Error("Неверный код комнаты.");
   }
 
-  if (message.includes("AUTH_REQUIRED") || message.toLowerCase().includes("login")) {
+  if (
+    message.includes("AUTH_REQUIRED") ||
+    message.toLowerCase().includes("login") ||
+    message.toLowerCase().includes("auth session missing")
+  ) {
     return new Error("Сначала войди в FRAKTUM Cloud в разделе «Профиль».");
   }
 
@@ -143,16 +147,15 @@ async function requireAuthenticatedUser() {
   const client = requireSupabase();
   await syncSupabaseSessionFromLauncher();
 
-  const { data, error } = await client.auth.getUser();
-  if (error) throw error;
+  const { data: sessionData, error: sessionError } = await client.auth.getSession();
+  if (sessionError) throw sessionError;
 
-  if (!data.user) {
-    throw new Error(
-      "You must log in through Profile → FRAKTUM Cloud before searching for an online match.",
-    );
+  const session = sessionData.session;
+  if (!session?.user) {
+    throw new Error("AUTH_REQUIRED: Войди в FRAKTUM Cloud перед онлайн-матчем.");
   }
 
-  return { client, user: data.user };
+  return { client, user: session.user };
 }
 
 export function isOnlineMatchmakingConfigured() {
