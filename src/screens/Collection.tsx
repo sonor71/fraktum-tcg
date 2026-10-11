@@ -109,7 +109,7 @@ export default function Collection() {
         </div>
 
         <button onClick={() => nav("/")} type="button">
-          Back to Hub
+          В МЕНЮ
         </button>
       </header>
 
