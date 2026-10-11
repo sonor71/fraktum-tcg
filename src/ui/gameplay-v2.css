@@ -1414,3 +1414,29 @@
     font-size: 6px !important;
   }
 }
+
+
+/* AI tutorial toggle is part of the simplified arena, so keep it in global gameplay styles. */
+.playTutorialToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 38px;
+  margin-top: 8px;
+  color: #d9c7ff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .09em;
+  cursor: pointer;
+  user-select: none;
+}
+.playTutorialToggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #b695ff;
+}
+.playTutorialToggle span {
+  line-height: 1;
+}
