@@ -10,6 +10,7 @@ import {
   CLOUD_AUTOSYNC_CHANGED_EVENT,
   getCloudAuthState,
   getCloudSaveMeta,
+  getUnifiedFraktumIdentity,
   isCloudAutoSyncEnabled,
   onCloudAuthStateChange,
   pullCloudSaveToLocal,
@@ -18,8 +19,10 @@ import {
   setCloudAutoSyncEnabled,
   signOutCloud,
   verifyCloudEmailCode,
+  syncUnifiedFraktumIdentityToGame,
   type CloudAuthState,
   type CloudSaveMeta,
+  type UnifiedFraktumIdentity,
 } from "../services/fraktumCloudSync";
 import { useGameStore } from "../useGameStore";
 
@@ -125,6 +128,7 @@ export function CloudAccountPanel() {
     user: null,
   });
   const [saveMeta, setSaveMeta] = useState<CloudSaveMeta | null>(null);
+  const [identity, setIdentity] = useState<UnifiedFraktumIdentity | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
@@ -152,9 +156,15 @@ export function CloudAccountPanel() {
       setAuthState(nextAuthState);
 
       if (nextAuthState.user) {
-        setSaveMeta(await getCloudSaveMeta().catch(() => null));
+        const [nextSaveMeta, nextIdentity] = await Promise.all([
+          getCloudSaveMeta().catch(() => null),
+          syncUnifiedFraktumIdentityToGame().catch(() => getUnifiedFraktumIdentity().catch(() => null)),
+        ]);
+        setSaveMeta(nextSaveMeta);
+        setIdentity(nextIdentity);
       } else {
         setSaveMeta(null);
+        setIdentity(null);
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -284,8 +294,8 @@ export function CloudAccountPanel() {
   if (loading) {
     return (
       <section style={panelStyle}>
-        <strong>FRAKTUM Cloud</strong>
-        <span style={mutedStyle}>Проверка аккаунта...</span>
+        <strong>Единый аккаунт FRAKTUM</strong>
+        <span style={mutedStyle}>Проверка общей сессии сайта и игры...</span>
       </section>
     );
   }
@@ -293,11 +303,9 @@ export function CloudAccountPanel() {
   if (!authState.configured) {
     return (
       <section style={panelStyle}>
-        <strong>FRAKTUM Cloud</strong>
+        <strong>Единый аккаунт FRAKTUM</strong>
         <span style={mutedStyle}>
-          Supabase не настроен. Добавь VITE_SUPABASE_URL и
-          VITE_SUPABASE_ANON_KEY в .env/.env.local и в Vercel Environment
-          Variables, затем пересобери проект.
+          Общий Supabase аккаунт сейчас недоступен.
         </span>
       </section>
     );
@@ -308,7 +316,11 @@ export function CloudAccountPanel() {
       <section style={panelStyle}>
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <div>
-            <strong>FRAKTUM Cloud подключён</strong>
+            <strong>Единый аккаунт FRAKTUM подключён</strong>
+            <div style={mutedStyle}>
+              {identity?.displayName || accountEmail}
+              {identity?.username ? ` · @${identity.username}` : ""}
+            </div>
             <div style={mutedStyle}>{accountEmail}</div>
           </div>
           <button
@@ -349,6 +361,10 @@ export function CloudAccountPanel() {
         </div>
 
         <span style={mutedStyle}>
+          Один и тот же Supabase аккаунт используется на литературной платформе и в FRAKTUM TCG.
+        </span>
+
+        <span style={mutedStyle}>
           Cloud save:{" "}
           {saveMeta?.hasSave
             ? `revision ${saveMeta.revision ?? "—"}, ${formatDate(saveMeta.updatedAt)}`
@@ -370,9 +386,10 @@ export function CloudAccountPanel() {
   return (
     <section style={panelStyle}>
       <div>
-        <strong>Вход в FRAKTUM Cloud</strong>
+        <strong>Единый аккаунт FRAKTUM</strong>
         <div style={mutedStyle}>
-          Пароль не нужен. Сначала запроси код, затем введи его во втором поле.
+          Используй ту же почту, что и на литературном сайте FRAKTUM. Это один и тот же аккаунт.
+          Пароль не нужен: получи код на почту и введи его ниже.
         </div>
       </div>
 
