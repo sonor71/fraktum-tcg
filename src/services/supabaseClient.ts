@@ -1,7 +1,12 @@
 import { createClient, type Session, type SupabaseClient, type User } from "@supabase/supabase-js";
 
-const RAW_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const DEFAULT_SUPABASE_URL = "https://bvnbqjhgnlvthkluddfj.supabase.co";
+const DEFAULT_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_s2R7vW5VSbr86iCWYnRAgA_hgAvpscz";
+
+const RAW_SUPABASE_URL =
+  (import.meta.env.VITE_SUPABASE_URL as string | undefined) || DEFAULT_SUPABASE_URL;
+const SUPABASE_ANON_KEY =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
 function normalizeSupabaseUrl(value: string | undefined) {
   const normalized = value?.trim().replace(/\/rest\/v1\/?$/i, "").replace(/\/+$/, "");
