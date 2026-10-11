@@ -78,8 +78,24 @@ function onlineBackendError(error: unknown, context: string) {
 
   if (message.toLowerCase().includes("row-level security")) {
     return new Error(
-      `${context}: Supabase RLS blocked the request. Re-run fraktum_online_backend.sql.`,
+      `${context}: Supabase RLS заблокировал запрос.`,
     );
+  }
+
+  if (message.includes("FRIEND_ROOM_NOT_FOUND")) {
+    return new Error("Комната с таким кодом не найдена или уже занята.");
+  }
+
+  if (message.includes("FRIEND_ROOM_ALREADY_JOINED")) {
+    return new Error("К этой комнате уже подключился другой игрок.");
+  }
+
+  if (message.includes("INVALID_INVITE_CODE")) {
+    return new Error("Неверный код комнаты.");
+  }
+
+  if (message.includes("AUTH_REQUIRED") || message.toLowerCase().includes("login")) {
+    return new Error("Сначала войди в FRAKTUM Cloud в разделе «Профиль».");
   }
 
   return new Error(`${context}: ${message}`);
