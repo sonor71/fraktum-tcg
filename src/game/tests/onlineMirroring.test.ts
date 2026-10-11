@@ -66,6 +66,37 @@ describe("online PvP mirrored state", () => {
     expect(host.rngSeed).toBe(guest.rngSeed);
   });
 
+  it("keeps physical decks mirrored when battle 2 starts", () => {
+    let { host, guest } = makeMirroredStates(1791745202222);
+
+    host = {
+      ...host,
+      phase: "betweenBattles",
+      battleNumber: 1,
+      seriesScore: { player: 1, enemy: 0 },
+    } as MatchState;
+
+    guest = {
+      ...guest,
+      phase: "betweenBattles",
+      battleNumber: 1,
+      seriesScore: { player: 0, enemy: 1 },
+    } as MatchState;
+
+    const hostNext = dispatch(host, { type: "START_NEXT_BATTLE", battleNumber: 1 });
+    const guestNext = dispatch(guest, { type: "START_NEXT_BATTLE", battleNumber: 1 });
+
+    expect(hostNext.battleNumber).toBe(2);
+    expect(guestNext.battleNumber).toBe(2);
+    expect(hostNext.player.hand.map((card) => card.baseId)).toEqual(
+      guestNext.enemy.hand.map((card) => card.baseId),
+    );
+    expect(hostNext.enemy.hand.map((card) => card.baseId)).toEqual(
+      guestNext.player.hand.map((card) => card.baseId),
+    );
+    expect(hostNext.rngSeed).toBe(guestNext.rngSeed);
+  });
+
   it("applies the same played card on both clients after player/enemy remapping", () => {
     let { host, guest } = makeMirroredStates(1791745201234);
 
