@@ -446,10 +446,28 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
   let seed = payload.seed ?? 12345;
   let playerSide: PlayerState = makeSide("player", playerDeck, defs, playerWillConfig);
   let enemySide: PlayerState = makeSide("enemy", enemyDeck, defs, enemyWillConfig);
-  const playerShuffle = shuffleWithSeed(playerSide.deck, seed);
-  seed = playerShuffle.seed;
-  const enemyShuffle = shuffleWithSeed(enemySide.deck, seed);
-  seed = enemyShuffle.seed;
+
+  const hasExplicitOnlineSeeds =
+    Number.isFinite(payload.playerShuffleSeed) &&
+    Number.isFinite(payload.enemyShuffleSeed) &&
+    Number.isFinite(payload.gameplaySeed);
+
+  const playerShuffle = shuffleWithSeed(
+    playerSide.deck,
+    hasExplicitOnlineSeeds ? Number(payload.playerShuffleSeed) : seed,
+  );
+
+  if (!hasExplicitOnlineSeeds) {
+    seed = playerShuffle.seed;
+  }
+
+  const enemyShuffle = shuffleWithSeed(
+    enemySide.deck,
+    hasExplicitOnlineSeeds ? Number(payload.enemyShuffleSeed) : seed,
+  );
+
+  seed = hasExplicitOnlineSeeds ? Number(payload.gameplaySeed) : enemyShuffle.seed;
+
   playerSide = drawCards({ ...playerSide, deck: playerShuffle.items, hand: [] }, STARTING_HAND_SIZE);
   enemySide = drawCards({ ...enemySide, deck: enemyShuffle.items, hand: [] }, STARTING_HAND_SIZE);
 
