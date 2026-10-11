@@ -56,6 +56,17 @@ export type CloudAuthState = {
   user: FraktumCloudUser | null;
 };
 
+export type UnifiedFraktumIdentity = {
+  userId: string;
+  email: string;
+  displayName: string;
+  username: string;
+  nickname: string;
+  avatarUrl: string;
+  accountRole: "reader" | "author";
+  authorVerified: boolean;
+};
+
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -117,6 +128,92 @@ export function applyCloudSaveData(save: unknown) {
   }
 
   useGameStore.setState(nextState, false);
+}
+
+export async function getUnifiedFraktumIdentity(): Promise<UnifiedFraktumIdentity | null> {
+  const client = requireSupabase();
+  await syncSupabaseSessionFromLauncher();
+
+  const { data: userData, error: userError } = await client.auth.getUser();
+  if (userError || !userData.user) return null;
+
+  const user = userData.user;
+  const [{ data: literatureProfile }, { data: baseProfile }, { data: gameProfile }] = await Promise.all([
+    client
+      .from("lit_profiles")
+      .select("username,nickname,first_name,last_name,account_role,author_verified,avatar_path")
+      .eq("id", user.id)
+      .maybeSingle(),
+    client
+      .from("profiles")
+      .select("display_name,avatar_url")
+      .eq("id", user.id)
+      .maybeSingle(),
+    client
+      .from("game_profiles")
+      .select("display_name,avatar_url")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+
+  const username = typeof literatureProfile?.username === "string" ? literatureProfile.username.trim() : "";
+  const nickname = typeof literatureProfile?.nickname === "string" ? literatureProfile.nickname.trim() : "";
+  const firstName = typeof literatureProfile?.first_name === "string" ? literatureProfile.first_name.trim() : "";
+  const lastName = typeof literatureProfile?.last_name === "string" ? literatureProfile.last_name.trim() : "";
+  const fullName = [firstName, lastName].filter(Boolean).join(" ");
+  const email = user.email ?? "";
+
+  const displayName =
+    nickname ||
+    fullName ||
+    username ||
+    (typeof baseProfile?.display_name === "string" ? baseProfile.display_name.trim() : "") ||
+    (typeof gameProfile?.display_name === "string" ? gameProfile.display_name.trim() : "") ||
+    email.split("@")[0] ||
+    "FRAKTUM Player";
+
+  const avatarPath = typeof literatureProfile?.avatar_path === "string" ? literatureProfile.avatar_path.trim() : "";
+  const literatureAvatar = avatarPath
+    ? client.storage.from("lit-avatars").getPublicUrl(avatarPath).data.publicUrl
+    : "";
+
+  const avatarUrl =
+    literatureAvatar ||
+    (typeof baseProfile?.avatar_url === "string" ? baseProfile.avatar_url : "") ||
+    (typeof gameProfile?.avatar_url === "string" ? gameProfile.avatar_url : "");
+
+  return {
+    userId: user.id,
+    email,
+    displayName,
+    username,
+    nickname,
+    avatarUrl,
+    accountRole: literatureProfile?.account_role === "author" ? "author" : "reader",
+    authorVerified: Boolean(literatureProfile?.author_verified),
+  };
+}
+
+export async function syncUnifiedFraktumIdentityToGame() {
+  const identity = await getUnifiedFraktumIdentity();
+  if (!identity) return null;
+
+  const state = getCurrentStoreState();
+  const nextState: Partial<GameState> = {};
+
+  if (identity.displayName && state.playerName !== identity.displayName) {
+    nextState.playerName = identity.displayName;
+  }
+
+  if (identity.avatarUrl && state.avatar !== identity.avatarUrl) {
+    nextState.avatar = identity.avatarUrl;
+  }
+
+  if (Object.keys(nextState).length > 0) {
+    useGameStore.setState(nextState, false);
+  }
+
+  return identity;
 }
 
 export async function getCloudAuthState(): Promise<CloudAuthState> {
@@ -205,8 +302,9 @@ export async function verifyCloudEmailCode(email: string, code: string, displayN
   // must never make the UI report that login failed.
   try {
     await ensureCloudProfile(displayName);
+    await syncUnifiedFraktumIdentityToGame();
   } catch (profileError) {
-    console.warn("[FRAKTUM] Login succeeded, but profile sync failed", profileError);
+    console.warn("[FRAKTUM] Login succeeded, but shared profile sync failed", profileError);
   }
 
   return data.user;
@@ -247,19 +345,34 @@ export async function ensureCloudProfile(displayName?: string) {
   if (!user) throw new Error("No authenticated Supabase user.");
 
   const state = getCurrentStoreState();
-  const resolvedName = displayName?.trim() || state.playerName || user.email || "FRAKTUM Player";
+  const identity = await getUnifiedFraktumIdentity().catch(() => null);
+  const resolvedName =
+    identity?.displayName ||
+    displayName?.trim() ||
+    state.playerName ||
+    user.email ||
+    "FRAKTUM Player";
+  const avatarUrl = identity?.avatarUrl || state.avatar || null;
 
   const { error } = await client.from("game_profiles").upsert(
     {
       user_id: user.id,
       display_name: resolvedName,
-      avatar_url: state.avatar || null,
+      avatar_url: avatarUrl,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" }
   );
 
   if (error) throw error;
+
+  if (identity) {
+    const patch: Partial<GameState> = {};
+    if (state.playerName !== identity.displayName) patch.playerName = identity.displayName;
+    if (identity.avatarUrl && state.avatar !== identity.avatarUrl) patch.avatar = identity.avatarUrl;
+    if (Object.keys(patch).length > 0) useGameStore.setState(patch, false);
+  }
+
   return user;
 }
 
