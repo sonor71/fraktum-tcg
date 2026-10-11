@@ -588,3 +588,109 @@
     top: 14.5% !important;
   }
 }
+
+
+/* ---------- Online friend rooms ---------- */
+.onlineFriendInvite,
+.onlineFriendJoin {
+  width: min(620px, 100%);
+  margin: 14px auto 0;
+  padding: 14px;
+  border: 2px solid var(--fr-border);
+  background: #091022;
+  box-shadow: 3px 3px 0 var(--fr-shadow);
+  font-family: var(--fr-font);
+}
+
+.onlineFriendInvite {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.onlineFriendInvite > span,
+.onlineFriendJoin > span {
+  color: var(--fr-violet-soft);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .14em;
+}
+
+.onlineFriendInvite > strong {
+  grid-row: span 2;
+  color: var(--fr-gold-soft);
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: .15em;
+}
+
+.onlineFriendInvite > small {
+  color: var(--fr-muted);
+  font-size: 11px;
+}
+
+.onlineFriendInvite > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.onlineFriendJoin {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.onlineFriendJoin > span {
+  grid-column: 1 / -1;
+}
+
+.onlineFriendJoin input {
+  min-width: 0;
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 2px solid var(--fr-border);
+  border-radius: 0;
+  color: var(--fr-gold-soft);
+  background: #080f20;
+  box-shadow: 2px 2px 0 var(--fr-shadow);
+  font: 900 20px var(--fr-font);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  outline: none;
+}
+
+.onlineFriendJoin input:focus {
+  border-color: var(--fr-violet);
+}
+
+.onlineFriendJoin .matchGoldButton:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 700px) {
+  .onlineFriendInvite,
+  .onlineFriendJoin {
+    width: 100%;
+  }
+
+  .onlineFriendInvite {
+    grid-template-columns: 1fr;
+  }
+
+  .onlineFriendInvite > strong,
+  .onlineFriendInvite > button {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .onlineFriendJoin {
+    grid-template-columns: 1fr;
+  }
+
+  .onlineFriendJoin > span {
+    grid-column: auto;
+  }
+}
