@@ -1,7 +1,7 @@
 import type { GameAction } from "../core/GameAction";
 import type { CardInstance, MatchState } from "../core/types";
 import { confirmFateRouletteResult, endTurn, playBlindTopCard, playCard, rollD20 } from "../engine/MatchEngine";
-import { getFateRouletteConfirmRemainingMs, spinFateRoulette } from "../engine/FateRoulette";
+import { FATE_ROULETTE_RESULT_READ_MS, revealFateRouletteResult, spinFateRoulette } from "../engine/FateRoulette";
 import {
   canPlayerMakeAnyMove,
   cardRequiresBoardSlot,
@@ -58,8 +58,8 @@ export function planNextAiAction(state: MatchState): GameAction | null {
     const roulette = state.rouletteState;
     if (!roulette || roulette.ownerId !== "enemy") return null;
     if (roulette.stage === "awaitingSpin") return { type: "SPIN_FATE_ROULETTE", playerId: "enemy", rouletteId: roulette.id };
+    if (roulette.stage === "spinning") return { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: roulette.id, revealedAtMs: Date.now() };
     if (roulette.stage === "result") {
-      if (getFateRouletteConfirmRemainingMs(state, Date.now()) > 0) return null;
       return { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: roulette.id };
     }
     return null;
@@ -100,6 +100,7 @@ export function runSimpleAI(state: MatchState): MatchState {
     if (!action) return next;
     if (action.type === "ROLL_D20") next = rollD20(next, "enemy");
     else if (action.type === "SPIN_FATE_ROULETTE") next = spinFateRoulette(next, "enemy", action.rouletteId);
+    else if (action.type === "REVEAL_FATE_ROULETTE_RESULT") next = revealFateRouletteResult(next, "enemy", action.rouletteId, Date.now() - FATE_ROULETTE_RESULT_READ_MS);
     else if (action.type === "CONFIRM_FATE_ROULETTE_RESULT") next = confirmFateRouletteResult(next, "enemy", action.rouletteId);
     else if (action.type === "PLAY_BLIND_TOP_CARD") next = playBlindTopCard(next, "enemy", action.target);
     else if (action.type === "PLAY_CARD") {
