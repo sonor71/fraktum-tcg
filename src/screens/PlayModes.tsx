@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FRAKTUM_MAIN_DECK_SIZE, splitDeckSelection } from "../game/deckRules";
 import { useGameStore } from "../useGameStore";
+import { shouldDefaultTutorial } from "../components/match/tutorialState";
 
 export default function PlayModes() {
   const nav = useNavigate();
@@ -8,6 +10,7 @@ export default function PlayModes() {
   const deckIds = useGameStore((state) => state.deckIds);
   const mainDeckCount = splitDeckSelection(ownedCards, deckIds).mainDeck.length;
   const deckReady = mainDeckCount === FRAKTUM_MAIN_DECK_SIZE;
+  const [tutorialEnabled, setTutorialEnabled] = useState(() => shouldDefaultTutorial("ai"));
 
   const openMatch = (path: string) => {
     if (!deckReady) {
@@ -54,9 +57,17 @@ export default function PlayModes() {
                 Проверяй колоду, D20, Волю и комбинации карт.
               </p>
             </div>
-            <button className="playActionBtn isOpen" type="button" onClick={() => openMatch("/match/ai")}>
+            <button className="playActionBtn isOpen" type="button" onClick={() => openMatch(`/match/ai${tutorialEnabled ? "?tutorial=1" : ""}`)}>
               ИГРАТЬ
             </button>
+            <label className="playTutorialToggle">
+              <input
+                type="checkbox"
+                checked={tutorialEnabled}
+                onChange={(event) => setTutorialEnabled(event.target.checked)}
+              />
+              <span>ОБУЧЕНИЕ</span>
+            </label>
           </div>
         </section>
 
