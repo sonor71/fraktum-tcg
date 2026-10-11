@@ -211,7 +211,7 @@ export function MatchBoard({
   const actionHint = getActionHint(state, selectedCard, aiThinking, interactionLocked);
   const winnerLabel = getWinnerLabel(state.winner, playerName, enemyName);
   const battleResultTitle = state.battleResult === "player" ? "ПОБЕДА" : state.battleResult === "enemy" ? "ПОРАЖЕНИЕ" : "НИЧЬЯ";
-  const seriesScore = state.seriesScore ?? { player: 0, enemy: 0 };
+  const seriesScore = state.seriesScore ?? { player: 0, enemy: 0 };\n  const battleNumber = Math.max(1, Math.min(3, state.battleNumber ?? 1));
   const specialSourceCard = state.currentTurn?.discardPlayAvailable
     ? state.player.discard.at(-1)
     : state.currentTurn?.enemyDeckPlayCardId
@@ -279,6 +279,13 @@ export function MatchBoard({
           <strong>{state.lastRoll ?? "—"}</strong>
         </div>
       </div>
+      <section className="matchSeriesHud" aria-label="Match series progress">
+        <span>МАТЧ ДО 2 ПОБЕД</span>
+        <b>БОЙ {battleNumber} ИЗ 3</b>
+        <strong>{playerName} {seriesScore.player} : {seriesScore.enemy} {enemyName}</strong>
+        <small>ЦЕЛЬ: ПЕРВЫМ ВЫИГРАТЬ 2 БОЯ</small>
+      </section>
+
       <section className="matchMobileHud" aria-label="Mobile match status">
         <div className="matchMobileHudSide is-enemy">
           <span>{enemyName}</span>
