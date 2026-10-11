@@ -106,6 +106,7 @@ export async function fetchOnlineMatchActions(roomId: string) {
     .from("online_match_events")
     .select("*")
     .eq("room_id", roomId)
+    .order("created_at", { ascending: true })
     .order("id", { ascending: true });
 
   if (error) {
