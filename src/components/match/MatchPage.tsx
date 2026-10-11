@@ -28,11 +28,13 @@ import { TutorialOverlay, type TutorialStep } from "./TutorialOverlay";
 import { completeTutorial } from "./tutorialState";
 import {
   cancelOnlineMatchmaking,
+  createFriendOnlineRoom,
   fetchOnlineMatchRoom,
   getOpponentSnapshot,
   getOwnSnapshot,
   isOnlineMatchmakingConfigured,
   isRoomReady,
+  joinFriendOnlineRoom,
   joinOnlineMatchmaking,
   markOnlineRoomPlaying,
   subscribeToOnlineMatchRoom,
@@ -577,7 +579,8 @@ export default function MatchPage() {
   const [tacticalRevealEvents, setTacticalRevealEvents] = useState<TacticalRevealEvent[]>([]);
   const [matchReward, setMatchReward] = useState<MatchRewardResult | null>(null);
   const [onlineQueueState, setOnlineQueueState] = useState<OnlineQueueState>(() => isOnlineMode ? "idle" : "matched");
-  const [onlineQueueMessage, setOnlineQueueMessage] = useState("Online mode is ready. Start matchmaking when you are ready.");
+  const [onlineQueueMessage, setOnlineQueueMessage] = useState("Онлайн готов. Быстрый поиск или приватная комната для друга.");
+  const [friendRoomCode, setFriendRoomCode] = useState("");
   const [onlineRoom, setOnlineRoom] = useState<OnlineMatchRoom | null>(null);
   const [onlineSeat, setOnlineSeat] = useState<OnlineSeat | null>(null);
   const [turnAnnouncement, setTurnAnnouncement] = useState<MatchTurnAnnouncement | null>(null);
@@ -807,6 +810,7 @@ export default function MatchPage() {
     startedOnlineRoomId.current = null;
     setOnlineRoom(null);
     setOnlineSeat(null);
+    setFriendRoomCode("");
     setOnlineQueueState(isOnlineMode ? "idle" : "matched");
     setOnlineQueueMessage(
       isOnlineMode
@@ -1202,6 +1206,53 @@ export default function MatchPage() {
     }
   }, [recordDebug, willUpgrades]);
 
+  const watchOnlineRoom = useCallback(async (result: { room: OnlineMatchRoom; seat: OnlineSeat }) => {
+    setOnlineRoom(result.room);
+    setOnlineSeat(result.seat);
+
+    if (isRoomReady(result.room)) {
+      await startOnlineRoomMatch(result.room, result.seat);
+      return;
+    }
+
+    const roomLabel = result.room.invite_code
+      ? `Комната создана. Код для друга: ${result.room.invite_code}`
+      : `Ожидаем соперника. Комната ${result.room.id.slice(0, 8)}.`;
+    setOnlineQueueMessage(roomLabel);
+
+    onlineRoomUnsubscribe.current?.();
+    onlineRoomUnsubscribe.current = subscribeToOnlineMatchRoom(
+      result.room.id,
+      (nextRoom) => {
+        setOnlineRoom(nextRoom);
+        if (isRoomReady(nextRoom)) {
+          void startOnlineRoomMatch(nextRoom, result.seat);
+        }
+      },
+      (error) => {
+        setOnlineQueueMessage(
+          `Realtime warning: ${error instanceof Error ? error.message : String(error)}. Используем резервный polling.`,
+        );
+      },
+    );
+
+    const pollTimer = window.setInterval(async () => {
+      try {
+        const nextRoom = await fetchOnlineMatchRoom(result.room.id);
+        if (!nextRoom) return;
+        setOnlineRoom(nextRoom);
+        if (isRoomReady(nextRoom)) {
+          window.clearInterval(pollTimer);
+          await startOnlineRoomMatch(nextRoom, result.seat);
+        }
+      } catch {
+        window.clearInterval(pollTimer);
+      }
+    }, 2000);
+
+    onlineQueueTimer.current = pollTimer as unknown as number;
+  }, [startOnlineRoomMatch]);
+
   const startOnlineSearch = useCallback(async () => {
     clearTimer(onlineQueueTimer);
     onlineRoomUnsubscribe.current?.();
@@ -1210,65 +1261,72 @@ export default function MatchPage() {
 
     if (!isOnlineMatchmakingConfigured()) {
       setOnlineQueueState("error");
-      setOnlineQueueMessage("Supabase is not configured. Check .env.local and restart dev server.");
+      setOnlineQueueMessage("Supabase не настроен.");
       return;
     }
 
     setOnlineQueueState("searching");
-    setOnlineQueueMessage("Connecting to Supabase matchmaking queue...");
+    setOnlineQueueMessage("Ищем игрока в общей очереди...");
     recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_SEARCH_START", message: "Online matchmaking search started." });
 
     try {
       const willStats = getWillStatsFromUpgrades(willUpgrades);
       const snapshot = buildOnlinePlayerSnapshot(playerName, ownedCards, deckIds, willStats, level, avatar);
-
       const result = await joinOnlineMatchmaking(snapshot);
       recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_ROOM_FOUND", message: `Online room ${result.room.id.slice(0, 8)} found as seat ${result.seat.toUpperCase()}.`, metadata: { roomId: result.room.id, seat: result.seat, status: result.room.status } });
-      setOnlineRoom(result.room);
-      setOnlineSeat(result.seat);
-
-      if (isRoomReady(result.room)) {
-        await startOnlineRoomMatch(result.room, result.seat);
-        return;
-      }
-
-      setOnlineQueueMessage(`Waiting for opponent. Room ${result.room.id.slice(0, 8)} created.`);
-      recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_REALTIME_SUBSCRIBE", message: "Subscribing to online room realtime updates.", metadata: { roomId: result.room.id } });
-      onlineRoomUnsubscribe.current = subscribeToOnlineMatchRoom(
-        result.room.id,
-        (nextRoom) => {
-          setOnlineRoom(nextRoom);
-          if (isRoomReady(nextRoom)) {
-            void startOnlineRoomMatch(nextRoom, result.seat);
-          }
-        },
-        (error) => {
-          setOnlineQueueMessage(`Realtime warning: ${error instanceof Error ? error.message : String(error)}. Polling fallback is still available.`);
-        },
-      );
-
-      recordDebug({ source: "online_local", category: "online", actionType: "ONLINE_POLLING_FALLBACK", message: "Online room polling fallback started.", metadata: { roomId: result.room.id, intervalMs: 2500 } });
-      const pollTimer = window.setInterval(async () => {
-        try {
-          const nextRoom = await fetchOnlineMatchRoom(result.room.id);
-          if (!nextRoom) return;
-          setOnlineRoom(nextRoom);
-          if (isRoomReady(nextRoom)) {
-            window.clearInterval(pollTimer);
-            await startOnlineRoomMatch(nextRoom, result.seat);
-          }
-        } catch {
-          window.clearInterval(pollTimer);
-        }
-      }, 2500);
-
-      onlineQueueTimer.current = pollTimer as unknown as number;
+      await watchOnlineRoom(result);
     } catch (error) {
       recordDebug({ source: "online_local", level: "error", category: "online", actionType: "ONLINE_SEARCH_ERROR", message: error instanceof Error ? error.message : String(error), metadata: { error: sanitizeDebugValue(error) } });
       setOnlineQueueState("error");
       setOnlineQueueMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [avatar, recordDebug, deckIds, level, ownedCards, playerName, startOnlineRoomMatch, willUpgrades]);
+  }, [avatar, recordDebug, deckIds, level, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
+
+  const createFriendRoom = useCallback(async () => {
+    clearTimer(onlineQueueTimer);
+    onlineRoomUnsubscribe.current?.();
+    onlineRoomUnsubscribe.current = null;
+    startedOnlineRoomId.current = null;
+    setOnlineQueueState("searching");
+    setOnlineQueueMessage("Создаём приватную комнату...");
+
+    try {
+      const willStats = getWillStatsFromUpgrades(willUpgrades);
+      const snapshot = buildOnlinePlayerSnapshot(playerName, ownedCards, deckIds, willStats, level, avatar);
+      const result = await createFriendOnlineRoom(snapshot);
+      setFriendRoomCode(result.room.invite_code ?? "");
+      await watchOnlineRoom(result);
+    } catch (error) {
+      setOnlineQueueState("error");
+      setOnlineQueueMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [avatar, deckIds, level, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
+
+  const joinFriendRoom = useCallback(async () => {
+    const code = friendRoomCode.trim().toUpperCase();
+    if (code.length !== 6) {
+      setOnlineQueueState("error");
+      setOnlineQueueMessage("Введи 6-значный код комнаты.");
+      return;
+    }
+
+    clearTimer(onlineQueueTimer);
+    onlineRoomUnsubscribe.current?.();
+    onlineRoomUnsubscribe.current = null;
+    startedOnlineRoomId.current = null;
+    setOnlineQueueState("searching");
+    setOnlineQueueMessage(`Подключаемся к комнате ${code}...`);
+
+    try {
+      const willStats = getWillStatsFromUpgrades(willUpgrades);
+      const snapshot = buildOnlinePlayerSnapshot(playerName, ownedCards, deckIds, willStats, level, avatar);
+      const result = await joinFriendOnlineRoom(code, snapshot);
+      await watchOnlineRoom(result);
+    } catch (error) {
+      setOnlineQueueState("error");
+      setOnlineQueueMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [avatar, deckIds, friendRoomCode, level, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
 
   const cancelOnlineSearch = useCallback(async () => {
     clearTimer(onlineQueueTimer);
@@ -1574,14 +1632,55 @@ export default function MatchPage() {
             <div><span>Seat</span><b>{onlineSeat ? onlineSeat.toUpperCase() : "—"}</b></div>
           </div>
 
+          {onlineRoom?.invite_code ? (
+            <div className="onlineFriendInvite">
+              <span>КОД КОМНАТЫ</span>
+              <strong>{onlineRoom.invite_code}</strong>
+              <small>Отправь этот код другу. Он вводит его в разделе «Онлайн».</small>
+              <button
+                className="matchGhostButton"
+                type="button"
+                onClick={() => void navigator.clipboard?.writeText(onlineRoom.invite_code ?? "")}
+              >
+                КОПИРОВАТЬ КОД
+              </button>
+            </div>
+          ) : null}
+
           <div className="onlineMatchmakingActions">
             {onlineQueueState === "searching" ? (
-              <button className="matchGhostButton" type="button" onClick={cancelOnlineSearch}>Cancel search</button>
+              <button className="matchGhostButton" type="button" onClick={cancelOnlineSearch}>ОТМЕНИТЬ</button>
             ) : (
-              <button className="matchGoldButton" type="button" onClick={startOnlineSearch}>Search player</button>
+              <>
+                <button className="matchGoldButton" type="button" onClick={startOnlineSearch}>БЫСТРЫЙ ПОИСК</button>
+                <button className="matchGhostButton" type="button" onClick={createFriendRoom}>СОЗДАТЬ КОМНАТУ</button>
+              </>
             )}
-            <button className="matchGhostButton" type="button" onClick={() => nav("/play")}>Back</button>
+            <button className="matchGhostButton" type="button" onClick={() => nav("/play")}>НАЗАД</button>
           </div>
+
+          {onlineQueueState !== "searching" ? (
+            <div className="onlineFriendJoin">
+              <span>ИЛИ ВВЕДИ КОД ДРУГА</span>
+              <input
+                value={friendRoomCode}
+                onChange={(event) => setFriendRoomCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6))}
+                placeholder="ABC123"
+                maxLength={6}
+                inputMode="text"
+                autoComplete="off"
+                aria-label="Код комнаты друга"
+              />
+              <button
+                className="matchGoldButton"
+                type="button"
+                disabled={friendRoomCode.trim().length !== 6}
+                onClick={joinFriendRoom}
+              >
+                ПОДКЛЮЧИТЬСЯ
+              </button>
+            </div>
+          ) : null}
         </section>
         <MatchDebugConsole
           enabled={debugRecorder.enabled}
