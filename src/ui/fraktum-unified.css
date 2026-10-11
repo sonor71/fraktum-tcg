@@ -1,0 +1,582 @@
+/* FRAKTUM unified UI language
+   Mirrors the main menu: dark navy grid, violet + gold accents,
+   monospace labels, hard borders and offset shadows. */
+
+:root {
+  --fr-bg: #070b18;
+  --fr-bg-deep: #050813;
+  --fr-panel: #0d152b;
+  --fr-panel-2: #111a34;
+  --fr-panel-warm: #2a1c17;
+  --fr-border: #2d3a62;
+  --fr-border-soft: #25335c;
+  --fr-violet: #8867dc;
+  --fr-violet-soft: #a989ff;
+  --fr-gold: #d1a34d;
+  --fr-gold-soft: #f5e8aa;
+  --fr-text: #e8edff;
+  --fr-muted: #97a5ca;
+  --fr-shadow: #02040b;
+  --fr-font: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---------- Global shell ---------- */
+.coreShell,
+.coreShell--match {
+  color: var(--fr-text);
+  background: var(--fr-bg);
+  font-family: var(--fr-font);
+}
+
+.coreShellContent:not(.coreShellContent--match) {
+  min-height: calc(100vh - 68px);
+  padding: 26px 20px 56px;
+  background:
+    linear-gradient(90deg, transparent 31px, rgba(107, 82, 176, .07) 32px),
+    linear-gradient(transparent 31px, rgba(107, 82, 176, .07) 32px),
+    linear-gradient(180deg, #12182f 0%, #090d1d 58%, #050813 100%);
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+.coreShellHeader {
+  border-bottom-color: var(--fr-border-soft);
+  background: #081020;
+  box-shadow: 0 4px 0 var(--fr-shadow);
+  font-family: var(--fr-font);
+}
+
+.coreBrand,
+.coreNavButton,
+.coreSettings {
+  border-radius: 0;
+  font-family: var(--fr-font);
+}
+
+.coreNavButton,
+.coreSettings {
+  border-color: var(--fr-border);
+  background: #0d1427;
+  box-shadow: 2px 2px 0 var(--fr-shadow);
+}
+
+.coreNavButton:hover,
+.coreSettings:hover,
+.coreNavButton.is-active,
+.coreSettings.is-active {
+  border-color: var(--fr-violet);
+  background: #1b2140;
+  color: var(--fr-gold-soft);
+}
+
+/* ---------- Shared page chrome ---------- */
+.invRoot,
+.playRoot,
+.deckRoot,
+.shopRoot,
+.marketRoot,
+.demo-page,
+.profilePage,
+.clubsPage {
+  color: var(--fr-text);
+  font-family: var(--fr-font);
+}
+
+.invV2Header h1,
+.playTitle,
+.page-head h1,
+.marketHero h1,
+.clubsHeader h1 {
+  color: var(--fr-gold-soft);
+  font-family: var(--fr-font);
+  text-transform: uppercase;
+  text-shadow: 3px 3px 0 #372a66;
+  letter-spacing: .035em;
+}
+
+.invV2Header > div > span,
+.playKicker,
+.page-head p,
+.marketKicker,
+.marketPanelHead span,
+.clubsHeader p {
+  color: var(--fr-violet-soft);
+  font-family: var(--fr-font);
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.playLead,
+.clubsHeader span,
+.marketHero p:not(.marketKicker),
+.page-head + p {
+  color: var(--fr-muted);
+}
+
+/* Hard-edged panels: same language as the main menu. */
+.glass-panel,
+.invTabletV2,
+.invCraftPanelV2,
+.deckLeft,
+.deckRight,
+.shopCard,
+.marketHero,
+.marketStats,
+.marketInventoryPanel,
+.marketCreatePanel,
+.marketAuctionsPanel,
+.marketBackendNote,
+.clubsHeader,
+.clubsPanel,
+.playCardV2,
+.profileSyncBanner {
+  border: 3px solid var(--fr-border) !important;
+  border-radius: 0 !important;
+  background: rgba(7, 12, 27, .96) !important;
+  box-shadow: 5px 5px 0 var(--fr-shadow) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.playCardV2 {
+  border-color: #303d66 !important;
+}
+
+.playCardV2.is-ranked {
+  border-color: #5a478e !important;
+}
+
+.shopCard:hover,
+.playCardV2:hover,
+.marketInventoryCard:hover,
+.marketInventoryCard.is-selected {
+  transform: translate(-2px, -2px);
+  border-color: var(--fr-violet) !important;
+  box-shadow: 6px 6px 0 var(--fr-shadow) !important;
+}
+
+/* Tabs / compact controls */
+.invV2Tabs,
+.marketTabs,
+.clubsTabs {
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+
+.invV2Tabs button,
+.marketTabs button,
+.clubsTab {
+  border: 2px solid var(--fr-border) !important;
+  border-radius: 0 !important;
+  color: #aab6d4 !important;
+  background: #0a1123 !important;
+  box-shadow: 2px 2px 0 var(--fr-shadow);
+  font-family: var(--fr-font);
+  text-transform: uppercase;
+}
+
+.invV2Tabs button.is-active,
+.marketTabs button.is-active,
+.clubsTab.is-active,
+.clubsTab:hover {
+  border-color: var(--fr-violet) !important;
+  color: var(--fr-gold-soft) !important;
+  background: #171d39 !important;
+}
+
+/* Standard actions */
+.invDeckBtn,
+.invCraftRowV2 button,
+.invSheetActions button,
+.playActionBtn,
+.playDeckStatus,
+.deckBtn,
+.shopBack,
+.buyBtn,
+.marketPrimaryBtn,
+.marketGhostBtn,
+.marketDangerBtn,
+.demo-page button,
+.page-head button,
+.clubsTab {
+  border-radius: 0 !important;
+  font-family: var(--fr-font);
+  font-weight: 900;
+  box-shadow: 3px 3px 0 var(--fr-shadow);
+}
+
+.playActionBtn,
+.invSheetActions button.is-primary,
+.marketPrimaryBtn {
+  border: 2px solid var(--fr-gold) !important;
+  color: #1b1207 !important;
+  background: #d1a34d !important;
+}
+
+.playActionBtn:hover,
+.invSheetActions button.is-primary:hover,
+.marketPrimaryBtn:hover {
+  border-color: #ffd36e !important;
+  background: #e2b858 !important;
+}
+
+.playDeckStatus,
+.invDeckBtn,
+.deckBtn,
+.shopBack,
+.buyBtn,
+.marketGhostBtn,
+.demo-page button,
+.page-head button,
+.invCraftRowV2 button {
+  border: 2px solid var(--fr-border) !important;
+  color: var(--fr-text) !important;
+  background: #0d152b !important;
+}
+
+.playDeckStatus:hover,
+.invDeckBtn:hover,
+.deckBtn:hover,
+.shopBack:hover,
+.buyBtn:hover,
+.marketGhostBtn:hover,
+.demo-page button:hover:not(:disabled),
+.page-head button:hover:not(:disabled),
+.invCraftRowV2 button:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  border-color: var(--fr-violet) !important;
+  background: #151d39 !important;
+  box-shadow: 4px 4px 0 var(--fr-shadow) !important;
+}
+
+/* Inputs */
+.invSearch input,
+.invRarityFilter select,
+.marketFilters input,
+.marketFilters select,
+.marketField input,
+.marketField select,
+.demo-page input,
+.demo-page select,
+.demo-page textarea,
+.profile-card input {
+  border: 2px solid var(--fr-border) !important;
+  border-radius: 0 !important;
+  color: var(--fr-text) !important;
+  background: #080f20 !important;
+  font-family: var(--fr-font);
+  box-shadow: 2px 2px 0 var(--fr-shadow);
+}
+
+.invSearch input:focus,
+.invRarityFilter select:focus,
+.marketFilters input:focus,
+.marketFilters select:focus,
+.marketField input:focus,
+.marketField select:focus,
+.demo-page input:focus,
+.demo-page select:focus,
+.demo-page textarea:focus {
+  border-color: var(--fr-violet) !important;
+  box-shadow: 3px 3px 0 var(--fr-shadow) !important;
+}
+
+/* Inventory / deck / shop details */
+.invV2Tabs,
+.invV2Toolbar,
+.invTabletV2,
+.invCraftPanelV2,
+.shopHeader,
+.shopGrid {
+  width: min(1180px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.invCardSheet {
+  border: 3px solid var(--fr-border) !important;
+  border-radius: 0 !important;
+  background: #090f20 !important;
+  box-shadow: 6px 6px 0 var(--fr-shadow) !important;
+}
+
+.invSheetClose {
+  border-radius: 0 !important;
+  border-color: var(--fr-border) !important;
+  background: #0d152b !important;
+}
+
+.deckLeftBlock,
+.deckCharSlot,
+.deckBoostSlot,
+.deckMainSlot {
+  border-color: var(--fr-border) !important;
+  border-radius: 0 !important;
+  background: #091022 !important;
+}
+
+.shopBalance,
+.shopNotice,
+.packArt,
+.marketNotice,
+.marketSelectedCard,
+.marketEstimate,
+.marketInventoryCard,
+.auctionRow,
+.marketBackendNote,
+.marketEmpty {
+  border-radius: 0 !important;
+}
+
+.shopBalance,
+.shopNotice {
+  border: 2px solid var(--fr-border) !important;
+  background: #0d152b !important;
+  box-shadow: 2px 2px 0 var(--fr-shadow);
+}
+
+.marketInventoryCard,
+.auctionRow {
+  border-color: var(--fr-border) !important;
+  background: #0b1225 !important;
+  box-shadow: 3px 3px 0 var(--fr-shadow);
+}
+
+/* ---------- Match: same visual family as menu ---------- */
+.matchPage {
+  color: var(--fr-text);
+  font-family: var(--fr-font);
+  background:
+    linear-gradient(90deg, transparent 31px, rgba(107, 82, 176, .07) 32px),
+    linear-gradient(transparent 31px, rgba(107, 82, 176, .07) 32px),
+    linear-gradient(180deg, #12182f 0%, #090d1d 58%, #050813 100%);
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+.matchBackdrop {
+  opacity: .18;
+}
+
+.matchArenaShell {
+  border: 4px solid var(--fr-border);
+  background: rgba(7, 12, 27, .97);
+  box-shadow: 8px 8px 0 var(--fr-shadow), inset 0 0 0 2px #111b38;
+}
+
+.matchArenaFrame {
+  opacity: .34;
+}
+
+.matchArenaTopbar,
+.matchOpponentProfile,
+.matchBoardPanel,
+.matchHeroPanel,
+.matchWillStrip,
+.matchActionStatus,
+.matchD20Help,
+.matchWinnerCard,
+.fateRoulettePanel {
+  border-radius: 0 !important;
+  border-color: var(--fr-border) !important;
+  background: #0b1225 !important;
+  box-shadow: 4px 4px 0 var(--fr-shadow) !important;
+}
+
+.matchBackButton,
+.matchGhostButton,
+.matchGoldButton,
+.matchD20HelpButton {
+  border-radius: 0 !important;
+  font-family: var(--fr-font);
+  box-shadow: 3px 3px 0 var(--fr-shadow);
+}
+
+.matchBackButton,
+.matchGhostButton,
+.matchD20HelpButton {
+  border-color: var(--fr-border);
+  background: #0d152b;
+  color: var(--fr-text);
+}
+
+.matchGoldButton,
+.matchPlayerActionZone .is-end-turn:not(:disabled) {
+  border-color: var(--fr-gold) !important;
+  color: #1b1207 !important;
+  background: #d1a34d !important;
+}
+
+.matchPhaseBadge,
+.matchContextBanner,
+.matchRouletteNotice {
+  border-radius: 0 !important;
+  border-color: #5a478e !important;
+  color: #e8ddff !important;
+  background: #171d39 !important;
+  box-shadow: 3px 3px 0 var(--fr-shadow) !important;
+}
+
+.matchSeriesHud {
+  position: absolute;
+  z-index: 19;
+  top: 7.6%;
+  left: 50%;
+  width: min(410px, 40%);
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 3px 12px;
+  padding: 8px 12px;
+  border: 3px solid var(--fr-border);
+  background: #0d152b;
+  box-shadow: 4px 4px 0 var(--fr-shadow);
+  text-align: center;
+  pointer-events: none;
+}
+
+.matchSeriesHud span,
+.matchSeriesHud small {
+  color: var(--fr-muted);
+  font-size: clamp(7px, .55cqw, 10px);
+  font-weight: 900;
+  letter-spacing: .10em;
+}
+
+.matchSeriesHud b {
+  color: var(--fr-gold-soft);
+  font-size: clamp(10px, .85cqw, 15px);
+}
+
+.matchSeriesHud strong {
+  color: var(--fr-text);
+  font-size: clamp(9px, .72cqw, 13px);
+}
+
+.matchSeriesHud small {
+  grid-column: 1 / -1;
+  color: var(--fr-violet-soft);
+}
+
+.matchHeroPanel.is-left,
+.matchHeroPanel.is-right {
+  background: #0b1225 !important;
+}
+
+.matchBoardSlot {
+  border-radius: 0 !important;
+  border-color: #34436f !important;
+  background: #091022 !important;
+}
+
+.matchBoardSlot.is-valid,
+.matchBoardSlot.is-drag-over {
+  border-color: var(--fr-gold) !important;
+  box-shadow: inset 0 0 0 2px rgba(209,163,77,.22), 3px 3px 0 var(--fr-shadow) !important;
+}
+
+.matchMobileHudSide,
+.matchMobileHudCenter {
+  border-radius: 0 !important;
+  border-color: var(--fr-border) !important;
+  background: #0d152b !important;
+  box-shadow: 3px 3px 0 var(--fr-shadow) !important;
+}
+
+/* Tutorial: the dimmer must never steal the click from the highlighted control. */
+.tutorialOverlay {
+  pointer-events: none;
+}
+
+.tutorialShade {
+  pointer-events: none !important;
+}
+
+.tutorialTooltip {
+  border: 3px solid var(--fr-border) !important;
+  border-radius: 0 !important;
+  color: var(--fr-text) !important;
+  background: #090f20 !important;
+  box-shadow: 5px 5px 0 var(--fr-shadow) !important;
+  font-family: var(--fr-font);
+  pointer-events: auto;
+}
+
+.tutorialTooltip footer {
+  flex-wrap: wrap;
+}
+
+.tutorialTooltip footer span {
+  flex: 1 0 100%;
+  color: var(--fr-gold-soft);
+}
+
+.tutorialTooltip button {
+  border: 2px solid var(--fr-border) !important;
+  border-radius: 0 !important;
+  color: var(--fr-text) !important;
+  background: #0d152b !important;
+  box-shadow: 2px 2px 0 var(--fr-shadow);
+  font-family: var(--fr-font);
+}
+
+.tutorialTooltip button:hover {
+  border-color: var(--fr-violet) !important;
+  background: #171d39 !important;
+}
+
+.tutorialExitButton {
+  color: #aab6d4 !important;
+}
+
+/* The target itself stays interactive above ordinary match chrome. */
+.is-tutorial-target {
+  position: relative;
+  z-index: 4999 !important;
+  pointer-events: auto !important;
+}
+
+@media (orientation: landscape) and (max-width: 1100px) and (max-height: 600px) {
+  .matchSeriesHud {
+    display: none !important;
+  }
+
+  .tutorialTooltip {
+    max-height: min(170px, 70vh);
+    overflow: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .coreShellContent:not(.coreShellContent--match) {
+    padding: 14px 10px calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .coreShellHeader {
+    box-shadow: 0 3px 0 var(--fr-shadow);
+  }
+
+  .invV2Tabs,
+  .invV2Toolbar,
+  .invTabletV2,
+  .invCraftPanelV2,
+  .shopHeader,
+  .shopGrid {
+    width: 100%;
+  }
+
+  .glass-panel,
+  .invTabletV2,
+  .invCraftPanelV2,
+  .shopCard,
+  .marketHero,
+  .marketStats,
+  .marketInventoryPanel,
+  .marketCreatePanel,
+  .marketAuctionsPanel,
+  .clubsHeader,
+  .clubsPanel,
+  .playCardV2 {
+    box-shadow: 3px 3px 0 var(--fr-shadow) !important;
+  }
+}
