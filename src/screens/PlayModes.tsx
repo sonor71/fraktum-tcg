@@ -80,9 +80,9 @@ export default function PlayModes() {
             </div>
             <div className="playTextBlock">
               <h2 className="playModeTitle">ОНЛАЙН</h2>
-              <div className="playModeSubtitle">матч против игрока</div>
+              <div className="playModeSubtitle">быстрый поиск или комната с другом</div>
               <p className="playModeDescription">
-                Основной соревновательный режим FRAKTUM.
+                Создай код комнаты и отправь его другу либо найди случайного соперника.
               </p>
             </div>
             <button className="playActionBtn isOpen" type="button" onClick={() => openMatch("/match/online")}>
