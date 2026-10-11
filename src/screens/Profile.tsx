@@ -78,7 +78,7 @@ const xpIntoLevel = Math.max(0, xp - xpBeforeCurrentLevel);
           <p>FRAKTUM ACCOUNT</p>
           <h1>Profile</h1>
         </div>
-        <button onClick={() => nav("/")} type="button">Back to Hub</button>
+        <button onClick={() => nav("/")} type="button">В МЕНЮ</button>
       </header>
 
       <div className="profileSyncBanner profileCloudSyncBanner">
