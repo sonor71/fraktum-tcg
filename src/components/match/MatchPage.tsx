@@ -24,6 +24,8 @@ import type { MatchFxEvent } from "./MatchFxLayer";
 import type { CardTravelEvent } from "./CardTravelLayer";
 import type { TacticalRevealEvent } from "./TacticalRevealLayer";
 import type { MatchRoulettePresentation, MatchTurnAnnouncement } from "./MatchPresentationLayer";
+import { TutorialOverlay, type TutorialStep } from "./TutorialOverlay";
+import { completeTutorial } from "./tutorialState";
 import {
   cancelOnlineMatchmaking,
   fetchOnlineMatchRoom,
@@ -177,7 +179,9 @@ function validatePlay(matchState: MatchStateSnapshot, cardInstanceId: string, sl
     ? topDeckCard?.instanceId === cardInstanceId
       ? topDeckCard
       : undefined
-    : matchState.player.hand.find((candidate) => candidate.instanceId === cardInstanceId);
+    : matchState.player.hand.find((candidate) => candidate.instanceId === cardInstanceId)
+      ?? (matchState.currentTurn?.discardPlayAvailable ? matchState.player.discard.find((candidate) => candidate.instanceId === cardInstanceId) : undefined)
+      ?? (matchState.currentTurn?.enemyDeckPlayCardId === cardInstanceId ? matchState.enemy.deck.find((candidate) => candidate.instanceId === cardInstanceId) : undefined);
 
   if (!card) {
     if (blindTopActive && !topDeckCard) return "Blind Top is active, but your deck is empty.";
@@ -546,6 +550,7 @@ export default function MatchPage() {
   const { mode } = useParams<MatchRouteParams>();
   const matchMode = mode ?? (location.pathname.toLowerCase().includes("online") ? "online" : "ai");
   const isOnlineMode = matchMode === "online";
+  const tutorialRequested = !isOnlineMode && new URLSearchParams(location.search).get("tutorial") === "1";
   const applyMatchResultToProgress = useGameStore((store) => store.applyMatchResultToProgress);
   const ownedCards = useGameStore((store) => store.ownedCards);
   const deckIds = useGameStore((store) => store.deckIds);
@@ -577,6 +582,8 @@ export default function MatchPage() {
   const [onlineSeat, setOnlineSeat] = useState<OnlineSeat | null>(null);
   const [turnAnnouncement, setTurnAnnouncement] = useState<MatchTurnAnnouncement | null>(null);
   const [roulettePresentation, setRoulettePresentation] = useState<MatchRoulettePresentation | null>(null);
+  const [tutorialStepIndex, setTutorialStepIndex] = useState(tutorialRequested ? 0 : -1);
+  const tutorialFirstRoll = useRef(tutorialRequested);
   const [state, send] = useReducer(
     matchReducer,
     initialMatchPayload,
@@ -618,7 +625,7 @@ export default function MatchPage() {
     };
   }, [isOnlineMode, onlineRoom, onlineSeat]);
 
-  const interactionLocked = Boolean(turnAnnouncement || roulettePresentation);
+  const interactionLocked = Boolean(turnAnnouncement || roulettePresentation || state.rouletteState);
 
   const debugRecorder = useMatchDebugRecorder({
     enabled: true,
@@ -679,30 +686,6 @@ export default function MatchPage() {
       setTurnAnnouncement(null);
     }, TURN_ANNOUNCEMENT_MS);
   }, [isOnlineMode, opponentUi.name, state.activePlayerId, state.battleNumber, state.currentTurn, state.id, state.phase, state.turn, state.winner]);
-
-  useEffect(() => {
-    const latestRouletteEvent = [...(state.structuredEngineEvents ?? [])]
-      .reverse()
-      .find((event) => event.type === "ROULETTE_STARTED");
-
-    if (!latestRouletteEvent || latestRouletteEvent.id <= lastPresentedRouletteEventId.current) return;
-
-    const eventName = typeof latestRouletteEvent.payload?.event === "string"
-      ? latestRouletteEvent.payload.event
-      : state.activeRouletteEvent;
-    const ownerId = latestRouletteEvent.payload?.ownerId === "enemy" ? "enemy" : "player";
-
-    lastPresentedRouletteEventId.current = latestRouletteEvent.id;
-    if (!eventName) return;
-
-    clearTimer(turnAnnouncementTimer);
-    setTurnAnnouncement(null);
-    setRoulettePresentation({
-      id: latestRouletteEvent.id,
-      event: eventName,
-      ownerId,
-    });
-  }, [state.activeRouletteEvent, state.structuredEngineEvents]);
 
   const handleRoulettePresentationComplete = useCallback(() => {
     setRoulettePresentation(null);
@@ -1042,7 +1025,8 @@ export default function MatchPage() {
 
     setSelectedCardId(null);
     clearPendingPlay();
-    void submitGameAction({ type: "ROLL_D20", playerId: "player" } as GameAction);
+    void submitGameAction({ type: "ROLL_D20", playerId: "player", forcedRoll: tutorialFirstRoll.current ? 4 : undefined } as GameAction);
+    tutorialFirstRoll.current = false;
   }, [addUiLog, clearPendingPlay, interactionLocked, recordDebug, submitGameAction]);
 
   const handleEndTurn = useCallback(() => {
@@ -1308,6 +1292,19 @@ export default function MatchPage() {
     }
   }, [recordDebug, onlineRoom?.id]);
 
+  const handleRouletteSpin = useCallback((rouletteId: string) => {
+    void submitGameAction({ type: "SPIN_FATE_ROULETTE", playerId: "player", rouletteId });
+  }, [submitGameAction]);
+  const handleRouletteReveal = useCallback((rouletteId: string, revealedAtMs: number) => {
+    void submitGameAction({ type: "REVEAL_FATE_ROULETTE_RESULT", playerId: stateRef.current.rouletteState?.ownerId ?? "player", rouletteId, revealedAtMs });
+  }, [submitGameAction]);
+  const handleRouletteConfirm = useCallback((rouletteId: string) => {
+    void submitGameAction({ type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "player", rouletteId });
+  }, [submitGameAction]);
+  const handleChooseAwakening = useCallback((choice: "freeCard" | "passive") => {
+    void submitGameAction({ type: "CHOOSE_AWAKENING", playerId: "player", choice });
+  }, [submitGameAction]);
+
   const handleInvalidDrop = useCallback((message: string) => {
     addUiLog(message || "Invalid target.");
     setSelectedCardId(null);
@@ -1322,13 +1319,17 @@ export default function MatchPage() {
       return;
     }
 
-    if (state.activePlayerId !== "enemy" || state.phase !== "enemy" || state.winner) {
+    const enemyRoulette = state.phase === "roulette" && state.rouletteState?.ownerId === "enemy";
+    if ((!enemyRoulette && (state.activePlayerId !== "enemy" || state.phase !== "enemy")) || state.winner) {
       aiActionGuardRef.current = null;
       setAiThinking(false);
       return;
     }
 
     setAiThinking(true);
+    const rouletteWait = state.rouletteState?.stage === "result"
+      ? Math.max(150, (state.rouletteState.confirmAvailableAt ?? Date.now()) - Date.now() + 25)
+      : state.rouletteState?.stage === "spinning" ? 3800 : 0;
     aiTurnTimer.current = window.setTimeout(() => {
       aiTurnTimer.current = null;
       setAiThinking(false);
@@ -1378,7 +1379,7 @@ export default function MatchPage() {
 
       recordDebug({ source: "ai", category: "action", actionType: "AI_ACTION_PLANNED", message: `AI planned ${action.type}.`, action, before: createMatchDebugStateSummary(currentState) });
       send(action);
-    }, state.currentTurn?.playerId === "enemy" ? AUTO_AI_DELAY_MS : Math.max(150, Math.floor(AUTO_AI_DELAY_MS / 2)));
+    }, rouletteWait || (state.currentTurn?.playerId === "enemy" ? AUTO_AI_DELAY_MS : Math.max(150, Math.floor(AUTO_AI_DELAY_MS / 2))));
 
     return () => {
       clearTimer(aiTurnTimer);
@@ -1489,6 +1490,28 @@ export default function MatchPage() {
   }, [clearPendingPlay, handleRoll]);
 
   const mergedLog = useMemo(() => [...state.log, ...uiLog].slice(-18), [state.log, uiLog]);
+  const tutorialSteps = useMemo<TutorialStep[]>(() => [
+    { id: "goal", target: "field", text: "Ты играешь серию боёв до двух побед. Снизь HP героя соперника до нуля, сохранив своего героя." },
+    { id: "your-hp", target: "player-hero", text: "Это твой герой и его HP. Следи за здоровьем: поражение в бою получает герой с нулевым HP." },
+    { id: "enemy-hp", target: "enemy-hero", text: "Это герой соперника. Наноси ему урон картами и атаками с поля." },
+    { id: "will", target: "will", text: "Will — ресурс для розыгрыша карт. Если ресурса не хватает, карта будет недоступна." },
+    { id: "roll", target: "d20", text: "Каждый ход начинается с D20. Нажми на кубик — первый учебный бросок даст 4.", action: "roll" },
+    { id: "result", target: "d20", text: `Выпало ${state.lastRoll ?? 4}. В этот ход можно сыграть до ${state.lastRoll ?? 4} карт.` },
+    { id: "hand", target: "hand", text: "Это твоя рука. Нажми на доступную карту, чтобы открыть её паспорт, затем выбери СЫГРАТЬ.", action: "card" },
+    { id: "slot", target: "field", text: "Теперь нажми на подсвеченный свободный слот. Карта будет реально разыграна.", action: "slot" },
+    { id: "field-card", target: "field", text: "Карта на поле хранит реальные Attack и HP. Постоянная карта сможет атаковать по правилам следующего личного хода." },
+    { id: "end", target: "end-turn", text: "Когда закончил действия, нажми End Turn.", action: "end" },
+    { id: "done", target: "field", text: "Готово. Теперь сыграй матч самостоятельно." },
+  ], [state.lastRoll]);
+  const tutorialStep = tutorialStepIndex >= 0 ? tutorialSteps[tutorialStepIndex] : undefined;
+  const finishTutorial = useCallback(() => { completeTutorial(); setTutorialStepIndex(-1); }, []);
+  useEffect(() => {
+    if (!tutorialStep?.action) return;
+    if (tutorialStep.action === "roll" && state.lastRoll != null) setTutorialStepIndex((step) => step + 1);
+    if (tutorialStep.action === "card" && selectedCardId) setTutorialStepIndex((step) => step + 1);
+    if (tutorialStep.action === "slot" && (state.currentTurn?.cardsPlayed ?? 0) > 0) setTutorialStepIndex((step) => step + 1);
+    if (tutorialStep.action === "end" && state.activePlayerId === "enemy") setTutorialStepIndex((step) => step + 1);
+  }, [selectedCardId, state.activePlayerId, state.currentTurn?.cardsPlayed, state.lastRoll, tutorialStep?.action]);
 
   if (!currentDeckLoadout.isReady) {
     return (
@@ -1613,7 +1636,12 @@ export default function MatchPage() {
         roulettePresentation={roulettePresentation}
         interactionLocked={interactionLocked}
         onRoulettePresentationComplete={handleRoulettePresentationComplete}
+        onRouletteSpin={handleRouletteSpin}
+        onRouletteReveal={handleRouletteReveal}
+        onRouletteConfirm={handleRouletteConfirm}
+        onChooseAwakening={handleChooseAwakening}
       />
+      {tutorialStep ? <TutorialOverlay step={tutorialStep} onNext={() => { if (tutorialStep.id === "done") finishTutorial(); else setTutorialStepIndex((step) => step + 1); }} onSkip={finishTutorial} /> : null}
       <MatchDebugConsole
         enabled={debugRecorder.enabled}
         isOpen={debugRecorder.isOpen}

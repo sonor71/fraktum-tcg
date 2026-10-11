@@ -27,8 +27,20 @@ export const FATE_ROULETTE_EVENTS: FateRouletteEvent[] = [
 ];
 
 export function getD20PlayLimit(roll: number): number | "unlimited" {
-  if (roll >= 1 && roll <= 6) return roll;
+  if (roll >= 1 && roll <= 10) return roll;
+  if (roll >= 11 && roll <= 16) return 1;
+  if (roll === 19 || roll === 20) return 1;
   return "unlimited";
+}
+
+export type D20RuleKind = "limit" | "discard" | "roulette" | "doubleWill" | "enemyDeck" | "awakening";
+export function getD20Rule(roll: number): D20RuleKind {
+  if (roll <= 10) return "limit";
+  if (roll <= 14) return "discard";
+  if (roll <= 16) return "roulette";
+  if (roll <= 18) return "doubleWill";
+  if (roll === 19) return "enemyDeck";
+  return "awakening";
 }
 
 export function isFateRouletteRoll(roll: number) {

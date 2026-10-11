@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { runSimpleAI } from "../ai/SimpleAI";
 import { createInitialMatchState, endTurn, playCard, rollD20 } from "../engine/MatchEngine";
+import { FATE_ROULETTE_RESULT_READ_MS, revealFateRouletteResult, spinFateRoulette } from "../engine/FateRoulette";
+import { confirmFateRouletteResult } from "../engine/MatchEngine";
 import {
   cardRequiresBoardSlot,
   getBestPlayableCard,
@@ -45,6 +47,14 @@ describe("match engine stress flow", () => {
 
         if (state.activePlayerId === "player" && state.phase === "roll") {
           state = rollD20(state, "player");
+          continue;
+        }
+
+        if (state.phase === "roulette" && state.rouletteState) {
+          const roulette = state.rouletteState;
+          if (roulette.stage === "awaitingSpin") state = spinFateRoulette(state, roulette.ownerId, roulette.id);
+          else if (roulette.stage === "spinning") state = revealFateRouletteResult(state, roulette.ownerId, roulette.id, Date.now() - FATE_ROULETTE_RESULT_READ_MS);
+          else state = confirmFateRouletteResult(state, roulette.ownerId, roulette.id);
           continue;
         }
 

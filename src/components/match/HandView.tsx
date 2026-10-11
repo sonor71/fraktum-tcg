@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { CSSProperties, PointerEvent } from "react";
 import type { CardInstance } from "../../game/core/types";
 import { CardView } from "./CardView";
+import { openCardPassport } from "../CardPassport";
 
 type HandViewProps = {
   cards: CardInstance[];
@@ -200,6 +201,16 @@ export function HandView({
       setDrag(null);
 
       if (dropSlot === null) {
+        if (!shouldTreatAsDrag && releasedCard) {
+          openCardPassport({
+            baseId: releasedCard.baseId,
+            instanceId: releasedCard.instanceId,
+            frontImage: releasedCard.definition.image,
+            actionLabel: "СЫГРАТЬ",
+            actionDisabledReason: disabled ? "Сейчас эту карту сыграть нельзя." : undefined,
+            onAction: () => onSelect?.(releasedCard.instanceId),
+          });
+        }
         if (shouldTreatAsDrag) {
           const cardName = releasedCard ? getCardTitle(releasedCard) : "Card";
           onInvalidDrop?.(`${cardName}: drop on an empty player slot.`);
@@ -231,7 +242,7 @@ export function HandView({
       window.removeEventListener("pointercancel", finishDrag);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [cards, drag, onInvalidDrop, onPlay]);
+  }, [cards, disabled, drag, onInvalidDrop, onPlay, onSelect]);
 
   if (cards.length === 0) {
     return (
