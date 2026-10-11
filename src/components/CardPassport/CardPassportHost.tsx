@@ -45,6 +45,7 @@ function priceLabel(card: CardPassportData) {
 export function CardPassportHost() {
   const ownedCards = useGameStore((state) => state.ownedCards);
   const [card, setCard] = useState<CardPassportData | null>(null);
+  const [action, setAction] = useState<Pick<OpenPassportDetail, "actionLabel" | "actionDisabledReason" | "onAction"> | null>(null);
   const [rotationY, setRotationY] = useState(0);
   const [rotationX, setRotationX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -61,6 +62,7 @@ export function CardPassportHost() {
   const close = useCallback(() => {
     stopInertia();
     setCard(null);
+    setAction(null);
     setIsDragging(false);
     dragRef.current = null;
   }, [stopInertia]);
@@ -90,7 +92,10 @@ export function CardPassportHost() {
     const onCustomOpen = (event: Event) => {
       const customEvent = event as CustomEvent<OpenPassportDetail>;
       const resolved = resolvePassportFromDetail(customEvent.detail, ownedCards);
-      if (resolved) open(resolved);
+      if (resolved) {
+        setAction({ actionLabel: customEvent.detail.actionLabel, actionDisabledReason: customEvent.detail.actionDisabledReason, onAction: customEvent.detail.onAction });
+        open(resolved);
+      }
     };
 
     document.addEventListener("contextmenu", onContextMenu, true);
@@ -311,6 +316,12 @@ export function CardPassportHost() {
                 </section>
               ) : null}
             </div>
+            {action?.actionLabel ? (
+              <div className="fraktumPassport__matchAction">
+                <button type="button" disabled={Boolean(action.actionDisabledReason)} onClick={() => { if (!action.actionDisabledReason) { action.onAction?.(); close(); } }}>{action.actionLabel}</button>
+                {action.actionDisabledReason ? <small>{action.actionDisabledReason}</small> : null}
+              </div>
+            ) : null}
           </aside>
         </div>
       </section>
