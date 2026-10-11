@@ -1313,13 +1313,13 @@ export default function MatchPage() {
   useEffect(() => {
     clearTimer(aiTurnTimer);
 
-    if (isOnlineMode || interactionLocked) {
+    const enemyRoulette = state.phase === "roulette" && state.rouletteState?.ownerId === "enemy";
+    if (isOnlineMode || (interactionLocked && !enemyRoulette)) {
       aiActionGuardRef.current = null;
       setAiThinking(false);
       return;
     }
 
-    const enemyRoulette = state.phase === "roulette" && state.rouletteState?.ownerId === "enemy";
     if ((!enemyRoulette && (state.activePlayerId !== "enemy" || state.phase !== "enemy")) || state.winner) {
       aiActionGuardRef.current = null;
       setAiThinking(false);
