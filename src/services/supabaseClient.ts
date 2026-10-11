@@ -57,6 +57,49 @@ type LauncherSessionLike = {
   user?: unknown;
 };
 
+type FraktumAuthRequestMessage = {
+  type: "fraktum:auth-request";
+  projectRef?: string;
+};
+
+type FraktumAuthSessionMessage = {
+  type: "fraktum:auth-session";
+  projectRef?: string;
+  session?: LauncherSessionLike | null;
+};
+
+const SUPABASE_PROJECT_REF = (() => {
+  try {
+    return SUPABASE_URL ? new URL(SUPABASE_URL).hostname.split(".")[0] : "";
+  } catch {
+    return "";
+  }
+})();
+
+function decodeJwtPayload(token: string) {
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isSessionForCurrentProject(session: LauncherSessionLike | null | undefined) {
+  if (!hasTokens(session)) return false;
+  const payload = decodeJwtPayload(session.access_token);
+  const issuer = typeof payload?.iss === "string" ? payload.iss : "";
+  const ref = typeof payload?.ref === "string" ? payload.ref : "";
+  const expectedIssuer = SUPABASE_URL ? `${SUPABASE_URL}/auth/v1` : "";
+  return Boolean(
+    expectedIssuer &&
+    (issuer === expectedIssuer || (SUPABASE_PROJECT_REF && ref === SUPABASE_PROJECT_REF))
+  );
+}
+
 declare global {
   interface Window {
     launcher?: {
@@ -99,6 +142,57 @@ function hasTokens(session: LauncherSessionLike | null | undefined): session is 
   return Boolean(session?.access_token && session?.refresh_token);
 }
 
+async function acceptFraktumPlatformSession(event: MessageEvent<FraktumAuthSessionMessage>) {
+  if (!supabase || typeof window === "undefined") return;
+  if (event.source !== window.opener) return;
+
+  const message = event.data;
+  if (!message || message.type !== "fraktum:auth-session") return;
+  if (message.projectRef && SUPABASE_PROJECT_REF && message.projectRef !== SUPABASE_PROJECT_REF) return;
+  if (!isSessionForCurrentProject(message.session)) {
+    console.warn("[FRAKTUM] Ignored auth handoff from a different Supabase project.");
+    return;
+  }
+
+  const { data, error } = await supabase.auth.setSession({
+    access_token: message.session!.access_token!,
+    refresh_token: message.session!.refresh_token!,
+  });
+
+  if (error) {
+    console.warn("[FRAKTUM] Platform auth handoff setSession failed", error);
+    return;
+  }
+
+  window.__FRAKTUM_AUTH_HANDOFF_DONE__ = true;
+  window.dispatchEvent(
+    new CustomEvent("fraktum:cloud-auth-handoff", {
+      detail: { user: data.session?.user ?? null, source: "platform" },
+    }),
+  );
+}
+
+function requestFraktumPlatformSession() {
+  if (!supabase || typeof window === "undefined" || !window.opener || window.opener === window) return;
+
+  let attempts = 0;
+  const sendRequest = () => {
+    attempts += 1;
+    const message: FraktumAuthRequestMessage = {
+      type: "fraktum:auth-request",
+      projectRef: SUPABASE_PROJECT_REF,
+    };
+    window.opener?.postMessage(message, "*");
+
+    if (attempts >= 12) window.clearInterval(timer);
+  };
+
+  const timer = window.setInterval(sendRequest, 350);
+  sendRequest();
+
+  window.setTimeout(() => window.clearInterval(timer), 5000);
+}
+
 export async function syncSupabaseSessionFromLauncher() {
   if (!supabase || typeof window === "undefined") return null;
   if (window.__FRAKTUM_AUTH_HANDOFF_DONE__) {
@@ -118,7 +212,7 @@ export async function syncSupabaseSessionFromLauncher() {
   try { candidates.push(await window.api?.getAuthSession?.()); } catch (error) { console.warn("[FRAKTUM] api.getAuthSession failed", error); }
   try { candidates.push(await window.sb?.getSession?.()); } catch (error) { console.warn("[FRAKTUM] sb.getSession failed", error); }
 
-  const session = candidates.find(hasTokens);
+  const session = candidates.find(isSessionForCurrentProject);
   if (!session) return null;
 
   const { data, error } = await supabase.auth.setSession({
@@ -140,14 +234,19 @@ export async function syncSupabaseSessionFromLauncher() {
 // launched from Electron launcher: the launcher and the game have different
 // origins/localStorage, so the game must import Supabase session explicitly.
 if (typeof window !== "undefined") {
-  const runHandoff = () => {
-    void syncSupabaseSessionFromLauncher();
+  const runHandoff = async () => {
+    const current = await syncSupabaseSessionFromLauncher();
+    if (!current) requestFraktumPlatformSession();
   };
 
-  if (typeof queueMicrotask === "function") queueMicrotask(runHandoff);
-  else window.setTimeout(runHandoff, 0);
+  window.addEventListener("message", (event) => {
+    void acceptFraktumPlatformSession(event as MessageEvent<FraktumAuthSessionMessage>);
+  });
+
+  if (typeof queueMicrotask === "function") queueMicrotask(() => void runHandoff());
+  else window.setTimeout(() => void runHandoff(), 0);
 
   window.addEventListener("focus", () => {
-    void syncSupabaseSessionFromLauncher();
+    void runHandoff();
   });
 }
