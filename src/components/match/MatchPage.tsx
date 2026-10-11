@@ -50,6 +50,7 @@ import {
   subscribeToOnlineMatchActions,
   type OnlineMatchActionEvent,
 } from "../../services/onlineMatchActions";
+import { getOnlineMatchSeeds } from "../../services/onlineMatchSeed";
 import "./match.css";
 
 type MatchStateSnapshot = ReturnType<typeof createInitialMatchState>;
@@ -476,9 +477,14 @@ function buildMatchPayloadFromOnlineRoom(
 ): StartMatchPayload {
   const own = getOwnSnapshot(room, seat);
   const opponent = getOpponentSnapshot(room, seat);
+  const roomSeed = Number(room.seed || Date.now());
+  const onlineSeeds = getOnlineMatchSeeds(roomSeed, seat);
 
   return {
-    seed: Number(room.seed || Date.now()),
+    seed: roomSeed,
+    playerShuffleSeed: onlineSeeds.playerShuffleSeed,
+    enemyShuffleSeed: onlineSeeds.enemyShuffleSeed,
+    gameplaySeed: onlineSeeds.gameplaySeed,
     playerDeck:
       own?.deck && own.deck.length === FRAKTUM_MAIN_DECK_SIZE
         ? own.deck
