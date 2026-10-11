@@ -27,6 +27,9 @@ export type MatchWillStats = {
 
 export type StartMatchPayload = {
   seed?: number;
+  playerShuffleSeed?: number;
+  enemyShuffleSeed?: number;
+  gameplaySeed?: number;
   playerDeck?: CardDefinition[];
   enemyDeck?: CardDefinition[];
   playerHero?: CardDefinition;
