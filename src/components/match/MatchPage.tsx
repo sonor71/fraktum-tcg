@@ -1491,7 +1491,7 @@ export default function MatchPage() {
 
   const mergedLog = useMemo(() => [...state.log, ...uiLog].slice(-18), [state.log, uiLog]);
   const tutorialSteps = useMemo<TutorialStep[]>(() => [
-    { id: "goal", target: "field", text: "Ты играешь серию боёв до двух побед. Снизь HP героя соперника до нуля, сохранив своего героя." },
+    { id: "goal", target: "field", text: "Матч состоит максимум из 3 боёв. Побеждает тот, кто первым выиграет 2 боя. В каждом бою твоя цель — снизить HP героя соперника до нуля." },
     { id: "your-hp", target: "player-hero", text: "Это твой герой и его HP. Следи за здоровьем: поражение в бою получает герой с нулевым HP." },
     { id: "enemy-hp", target: "enemy-hero", text: "Это герой соперника. Наноси ему урон картами и атаками с поля." },
     { id: "will", target: "will", text: "Will — ресурс для розыгрыша карт. Если ресурса не хватает, карта будет недоступна." },
