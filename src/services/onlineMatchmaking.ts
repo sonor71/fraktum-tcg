@@ -44,6 +44,7 @@ export type OnlineMatchRoom = {
   match_state?: unknown;
   last_action?: unknown;
   winner?: string | null;
+  invite_code?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -116,6 +117,7 @@ function normalizeRoom(data: unknown): OnlineMatchRoom {
     match_state: record.match_state,
     last_action: record.last_action,
     winner: typeof record.winner === "string" ? record.winner : null,
+    invite_code: typeof record.invite_code === "string" ? record.invite_code : null,
     created_at: String(record.created_at || ""),
     updated_at: String(record.updated_at || ""),
   };
@@ -171,6 +173,63 @@ export function isRoomReady(room: OnlineMatchRoom) {
       room.player_a_snapshot.deck?.length === FRAKTUM_MAIN_DECK_SIZE &&
       room.player_b_snapshot.deck?.length === FRAKTUM_MAIN_DECK_SIZE,
   );
+}
+
+function normalizeInviteCode(value: string) {
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+}
+
+export async function createFriendOnlineRoom(
+  snapshot: OnlinePlayerSnapshot,
+): Promise<OnlineMatchmakingResult> {
+  try {
+    const { client, user } = await requireAuthenticatedUser();
+    const playerSnapshot: OnlinePlayerSnapshot = {
+      ...snapshot,
+      userId: user.id,
+      playerName: snapshot.playerName || user.email || "FRAKTUM Player",
+      createdAt: new Date().toISOString(),
+    };
+
+    const { data, error } = await client.rpc("create_friend_match", {
+      player_snapshot: playerSnapshot,
+    });
+    if (error) throw error;
+
+    const room = normalizeRoom(Array.isArray(data) ? data[0] : data);
+    return { room, seat: getSeatForRoom(room, user.id), userId: user.id };
+  } catch (error) {
+    throw onlineBackendError(error, "Could not create friend room");
+  }
+}
+
+export async function joinFriendOnlineRoom(
+  inviteCode: string,
+  snapshot: OnlinePlayerSnapshot,
+): Promise<OnlineMatchmakingResult> {
+  try {
+    const { client, user } = await requireAuthenticatedUser();
+    const code = normalizeInviteCode(inviteCode);
+    if (code.length !== 6) throw new Error("Friend room code must contain 6 characters.");
+
+    const playerSnapshot: OnlinePlayerSnapshot = {
+      ...snapshot,
+      userId: user.id,
+      playerName: snapshot.playerName || user.email || "FRAKTUM Player",
+      createdAt: new Date().toISOString(),
+    };
+
+    const { data, error } = await client.rpc("join_friend_match", {
+      invite_code: code,
+      player_snapshot: playerSnapshot,
+    });
+    if (error) throw error;
+
+    const room = normalizeRoom(Array.isArray(data) ? data[0] : data);
+    return { room, seat: getSeatForRoom(room, user.id), userId: user.id };
+  } catch (error) {
+    throw onlineBackendError(error, "Could not join friend room");
+  }
 }
 
 export async function joinOnlineMatchmaking(
