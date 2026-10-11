@@ -26,6 +26,8 @@ import type { TacticalRevealEvent } from "./TacticalRevealLayer";
 import type { MatchRoulettePresentation, MatchTurnAnnouncement } from "./MatchPresentationLayer";
 import { TutorialOverlay, type TutorialStep } from "./TutorialOverlay";
 import { completeTutorial } from "./tutorialState";
+import { CloudAccountPanel } from "../../cloud/CloudAccountPanel";
+import { getCloudAuthState, onCloudAuthStateChange } from "../../services/fraktumCloudSync";
 import {
   cancelOnlineMatchmaking,
   createFriendOnlineRoom,
@@ -580,6 +582,8 @@ export default function MatchPage() {
   const [matchReward, setMatchReward] = useState<MatchRewardResult | null>(null);
   const [onlineQueueState, setOnlineQueueState] = useState<OnlineQueueState>(() => isOnlineMode ? "idle" : "matched");
   const [onlineQueueMessage, setOnlineQueueMessage] = useState("Онлайн готов. Быстрый поиск или приватная комната для друга.");
+  const [onlineAuthReady, setOnlineAuthReady] = useState(!isOnlineMode);
+  const [onlineAuthChecked, setOnlineAuthChecked] = useState(!isOnlineMode);
   const [friendRoomCode, setFriendRoomCode] = useState("");
   const [onlineRoom, setOnlineRoom] = useState<OnlineMatchRoom | null>(null);
   const [onlineSeat, setOnlineSeat] = useState<OnlineSeat | null>(null);
@@ -618,6 +622,44 @@ export default function MatchPage() {
   const lastTurnAnnouncementKey = useRef<string | null>(null);
   const lastPresentedRouletteEventId = useRef(0);
   const presentationMatchId = useRef(state.id);
+
+  useEffect(() => {
+    if (!isOnlineMode) return;
+
+    let active = true;
+
+    const refreshOnlineAuth = async () => {
+      try {
+        const auth = await getCloudAuthState();
+        if (!active) return;
+        setOnlineAuthReady(Boolean(auth.user));
+        setOnlineAuthChecked(true);
+      } catch {
+        if (!active) return;
+        setOnlineAuthReady(false);
+        setOnlineAuthChecked(true);
+      }
+    };
+
+    void refreshOnlineAuth();
+
+    const unsubscribe = onCloudAuthStateChange((user) => {
+      if (!active) return;
+      const signedIn = Boolean(user);
+      setOnlineAuthReady(signedIn);
+      setOnlineAuthChecked(true);
+
+      if (signedIn) {
+        setOnlineQueueState((current) => current === "error" ? "idle" : current);
+        setOnlineQueueMessage("FRAKTUM Cloud подключён. Онлайн-матч готов.");
+      }
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [isOnlineMode]);
 
   const opponentUi = useMemo(() => {
     const snapshot = onlineRoom && onlineSeat ? getOpponentSnapshot(onlineRoom, onlineSeat) : null;
@@ -1254,6 +1296,12 @@ export default function MatchPage() {
   }, [startOnlineRoomMatch]);
 
   const startOnlineSearch = useCallback(async () => {
+    if (!onlineAuthReady) {
+      setOnlineQueueState("error");
+      setOnlineQueueMessage("Сначала войди в FRAKTUM Cloud ниже. Это нужно, чтобы Supabase различал двух игроков.");
+      return;
+    }
+
     clearTimer(onlineQueueTimer);
     onlineRoomUnsubscribe.current?.();
     onlineRoomUnsubscribe.current = null;
@@ -1280,9 +1328,15 @@ export default function MatchPage() {
       setOnlineQueueState("error");
       setOnlineQueueMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [avatar, recordDebug, deckIds, level, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
+  }, [avatar, recordDebug, deckIds, level, onlineAuthReady, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
 
   const createFriendRoom = useCallback(async () => {
+    if (!onlineAuthReady) {
+      setOnlineQueueState("error");
+      setOnlineQueueMessage("Сначала войди в FRAKTUM Cloud ниже, затем создай комнату.");
+      return;
+    }
+
     clearTimer(onlineQueueTimer);
     onlineRoomUnsubscribe.current?.();
     onlineRoomUnsubscribe.current = null;
@@ -1300,9 +1354,15 @@ export default function MatchPage() {
       setOnlineQueueState("error");
       setOnlineQueueMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [avatar, deckIds, level, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
+  }, [avatar, deckIds, level, onlineAuthReady, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
 
   const joinFriendRoom = useCallback(async () => {
+    if (!onlineAuthReady) {
+      setOnlineQueueState("error");
+      setOnlineQueueMessage("Сначала войди в FRAKTUM Cloud ниже, затем введи код комнаты.");
+      return;
+    }
+
     const code = friendRoomCode.trim().toUpperCase();
     if (code.length !== 6) {
       setOnlineQueueState("error");
@@ -1326,7 +1386,7 @@ export default function MatchPage() {
       setOnlineQueueState("error");
       setOnlineQueueMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [avatar, deckIds, friendRoomCode, level, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
+  }, [avatar, deckIds, friendRoomCode, level, onlineAuthReady, ownedCards, playerName, watchOnlineRoom, willUpgrades]);
 
   const cancelOnlineSearch = useCallback(async () => {
     clearTimer(onlineQueueTimer);
@@ -1647,13 +1707,24 @@ export default function MatchPage() {
             </div>
           ) : null}
 
+          {onlineAuthChecked && !onlineAuthReady ? (
+            <div className="onlineAuthGate">
+              <div className="onlineAuthGateCopy">
+                <span>НУЖНА АВТОРИЗАЦИЯ</span>
+                <b>Войди в FRAKTUM Cloud</b>
+                <p>Локальный ник «${playerName}» не является аккаунтом Supabase. Вход нужен только один раз — сессия сохранится в браузере.</p>
+              </div>
+              <CloudAccountPanel />
+            </div>
+          ) : null}
+
           <div className="onlineMatchmakingActions">
             {onlineQueueState === "searching" ? (
               <button className="matchGhostButton" type="button" onClick={cancelOnlineSearch}>ОТМЕНИТЬ</button>
             ) : (
               <>
-                <button className="matchGoldButton" type="button" onClick={startOnlineSearch}>БЫСТРЫЙ ПОИСК</button>
-                <button className="matchGhostButton" type="button" onClick={createFriendRoom}>СОЗДАТЬ КОМНАТУ</button>
+                <button className="matchGoldButton" type="button" disabled={!onlineAuthReady} onClick={startOnlineSearch}>БЫСТРЫЙ ПОИСК</button>
+                <button className="matchGhostButton" type="button" disabled={!onlineAuthReady} onClick={createFriendRoom}>СОЗДАТЬ КОМНАТУ</button>
               </>
             )}
             <button className="matchGhostButton" type="button" onClick={() => nav("/play")}>НАЗАД</button>
@@ -1674,7 +1745,7 @@ export default function MatchPage() {
               <button
                 className="matchGoldButton"
                 type="button"
-                disabled={friendRoomCode.trim().length !== 6}
+                disabled={!onlineAuthReady || friendRoomCode.trim().length !== 6}
                 onClick={joinFriendRoom}
               >
                 ПОДКЛЮЧИТЬСЯ
