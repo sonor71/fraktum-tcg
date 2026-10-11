@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - core/card-game-only
-      - core/match-refactor-port
   workflow_dispatch:
 
 permissions:
