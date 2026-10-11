@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FRAKTUM_MAIN_DECK_SIZE, splitDeckSelection } from "../game/deckRules";
 import { useGameStore } from "../useGameStore";
+import { shouldDefaultTutorial } from "../components/match/tutorialState";
 
 type Mode = {
   id: string;
@@ -18,6 +20,7 @@ export default function PlayModes() {
   const ownedCards = useGameStore((state) => state.ownedCards);
   const deckIds = useGameStore((state) => state.deckIds);
   const mainDeckCount = splitDeckSelection(ownedCards, deckIds).mainDeck.length;
+  const [tutorialEnabled, setTutorialEnabled] = useState(() => shouldDefaultTutorial("ai"));
 
   const openMatch = (path: string) => {
     if (mainDeckCount !== FRAKTUM_MAIN_DECK_SIZE) {
@@ -31,7 +34,7 @@ export default function PlayModes() {
     nav(path);
   };
 
-  const openAiMatch = () => openMatch("/match/ai");
+  const openAiMatch = () => openMatch(`/match/ai${tutorialEnabled ? "?tutorial=1" : ""}`);
   const openOnlineMatchmaking = () => openMatch("/match/online");
 
   const MODES: Mode[] = [
@@ -120,6 +123,7 @@ export default function PlayModes() {
                 >
                   {mode.actionLabel}
                 </button>
+                {mode.id === "ai" ? <label className="playTutorialToggle"><input type="checkbox" checked={tutorialEnabled} onChange={(event) => setTutorialEnabled(event.target.checked)} /> ОБУЧЕНИЕ</label> : null}
               </div>
             </section>
           );

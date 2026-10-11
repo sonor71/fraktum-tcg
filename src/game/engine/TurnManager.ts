@@ -129,7 +129,8 @@ export function getEffectiveCardCost(state: MatchState, playerId: PlayerId, card
   const turn = state.currentTurn;
   const freeByTurn = turn?.playerId === playerId && turn.freeCards;
   const freeByWorldWithoutWill = state.activeRouletteEvent === "WORLD_WITHOUT_WILL";
-  return freeByTurn || freeByWorldWithoutWill ? 0 : printedCost;
+  const multiplier = turn?.playerId === playerId ? turn.willCostMultiplier ?? 1 : 1;
+  return freeByTurn || freeByWorldWithoutWill ? 0 : printedCost * multiplier;
 }
 
 export function canPlayCardWithCurrentResources(state: MatchState, playerId: PlayerId, card: CardInstance) {

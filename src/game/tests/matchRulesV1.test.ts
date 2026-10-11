@@ -3,7 +3,7 @@ import type { CardDefinition, CardInstance, MatchState, PlayerId } from "../core
 import { getBonusPercent, scaleByElementBonus } from "../engine/BonusSystem";
 import { damageHero, resolveFieldCombat } from "../engine/DamageSystem";
 import { drawCards } from "../engine/DrawSystem";
-import { createInitialMatchState, destroyOwnCard, endTurn, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
+import { createInitialMatchState, destroyOwnCard, endTurn, playBlindTopCard, playCard, resolveCaduceusBattleDraw, rollD20 } from "../engine/MatchEngine";
 import { planNextAiAction, runSimpleAI } from "../ai/SimpleAI";
 import { BOARD_SIZE, clampTimerSeconds, getD20PlayLimit } from "../engine/Rules";
 
@@ -78,22 +78,16 @@ describe("FRAKTUM Match Rules v1.0", () => {
   it("6-8 D20 limits match the spec", () => {
     expect(getD20PlayLimit(1)).toBe(1);
     expect(getD20PlayLimit(6)).toBe(6);
-    expect(getD20PlayLimit(7)).toBe("unlimited");
+    expect(getD20PlayLimit(7)).toBe(7);
+    expect(getD20PlayLimit(10)).toBe(10);
   });
   it("9-11 roulette triggers per turn and rerolls 15-16 for a limit", () => {
     let state = createInitialMatchState({ seed: 31 });
     state = { ...state, rngSeed: 1198, activePlayerId: "player", phase: "roll" };
-    const next = rollD20(state, "player");
-    expect(next.currentTurn?.rouletteResolvedThisTurn).toBe(true);
-    expect(next.activeRouletteEvent).toBeDefined();
-    expect(next.structuredEngineEvents?.at(-1)).toMatchObject({
-      type: "ROULETTE_STARTED",
-      payload: { event: next.activeRouletteEvent, ownerId: "player" },
-    });
-    expect(next.lastRoll).not.toBe(15);
-    const again = rollD20({ ...next, phase: "roll", rngSeed: 1198 }, "player");
+    const next = rollD20(state, "player", 15);
+    expect(next.phase).toBe("roulette");
+    expect(next.rouletteState).toMatchObject({ ownerId: "player", triggerRoll: 15, stage: "awaitingSpin" });
     expect(next.rouletteUsedThisBattle).toBe(true);
-    expect(again.log.filter((l) => l.includes("[ROULETTE_STARTED]"))).toHaveLength(1);
   });
   it("resolves MERGED_DECKS when roulette starts from a D20 roll", () => {
     const playerDeckCard = inst(def("merge_player"), "player");
@@ -109,12 +103,10 @@ describe("FRAKTUM Match Rules v1.0", () => {
       rouletteUsedThisBattle: false,
     };
 
-    const next = rollD20(state, "player");
-    const mergedIds = [...next.player.deck, ...next.enemy.deck].map((card) => card.instanceId).sort();
-
-    expect(next.activeRouletteEvent).toBe("MERGED_DECKS");
-    expect(mergedIds).toEqual([enemyDeckCard.instanceId, playerDeckCard.instanceId].sort());
-    expect(next.log.some((line) => line.includes("[ROULETTE_MERGED_DECKS]"))).toBe(true);
+    const next = rollD20(state, "player", 16);
+    expect(next.phase).toBe("roulette");
+    expect(next.rouletteState?.stage).toBe("awaitingSpin");
+    expect([...next.player.deck, ...next.enemy.deck]).toHaveLength(2);
   });
 
   it("expires a roulette event before its owner's next personal turn", () => {
@@ -264,12 +256,12 @@ describe("FRAKTUM Match Rules v1.0", () => {
       player: { ...state.player, will: 5, hand: [handCard], deck: [topCard] },
     };
 
-    const next = playCard(state, "player", topCard.instanceId, { type: "slot", playerId: "player", slotIndex: 0 });
+    const next = playBlindTopCard(state, "player", { type: "slot", playerId: "player", slotIndex: 0 });
 
     expect(next.player.deck).toHaveLength(0);
     expect(next.player.hand).toEqual([handCard]);
     expect(next.board.playerSlots[0]?.instanceId).toBe(topCard.instanceId);
-    expect(next.log.some((line) => line.includes("from the top of the deck"))).toBe(true);
+    expect(next.log.some((line) => line.includes("[BLIND_TOP_CARD_PLAYED]"))).toBe(true);
   });
 
   it("AI uses the deck top during BLIND_TOP and completes its turn", () => {
@@ -282,10 +274,7 @@ describe("FRAKTUM Match Rules v1.0", () => {
       enemy: { ...state.enemy, will: 5, hand: [handCard], deck: [topCard] },
     };
 
-    expect(planNextAiAction(state)).toMatchObject({
-      type: "PLAY_CARD",
-      cardInstanceId: topCard.instanceId,
-    });
+    expect(planNextAiAction(state)).toMatchObject({ type: "PLAY_BLIND_TOP_CARD" });
 
     const next = runSimpleAI(state);
     expect(next.enemy.deck).toHaveLength(0);

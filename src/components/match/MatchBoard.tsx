@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CardInstance, MatchState } from "../../game/core/types";
 import { canPlayCardWithCurrentResources, getEffectiveCardCost } from "../../game/engine/TurnManager";
 import { BattleLog } from "./BattleLog";
@@ -17,6 +18,7 @@ import {
   type MatchRoulettePresentation,
   type MatchTurnAnnouncement,
 } from "./MatchPresentationLayer";
+import { FateRouletteOverlay } from "./FateRouletteOverlay";
 
 type MatchSide = MatchState["player"];
 
@@ -47,6 +49,10 @@ type MatchBoardProps = {
   roulettePresentation?: MatchRoulettePresentation | null;
   interactionLocked?: boolean;
   onRoulettePresentationComplete?: () => void;
+  onRouletteSpin: (rouletteId: string) => void;
+  onRouletteReveal: (rouletteId: string, revealedAtMs: number) => void;
+  onRouletteConfirm: (rouletteId: string) => void;
+  onChooseAwakening: (choice: "freeCard" | "passive") => void;
 };
 
 function clampPct(value: number, max: number) {
@@ -177,7 +183,12 @@ export function MatchBoard({
   roulettePresentation = null,
   interactionLocked = false,
   onRoulettePresentationComplete = () => undefined,
+  onRouletteSpin,
+  onRouletteReveal,
+  onRouletteConfirm,
+  onChooseAwakening,
 }: MatchBoardProps) {
+  const [showD20Help, setShowD20Help] = useState(false);
   const selectedCard = state.player.hand.find((card) => card.instanceId === selectedCardId);
   const isBetweenBattles = state.phase === "betweenBattles" && !state.winner;
   const canPlay = state.activePlayerId === "player" && state.phase === "main" && !state.winner && !interactionLocked;
@@ -201,6 +212,19 @@ export function MatchBoard({
   const winnerLabel = getWinnerLabel(state.winner, playerName, enemyName);
   const battleResultTitle = state.battleResult === "player" ? "ПОБЕДА" : state.battleResult === "enemy" ? "ПОРАЖЕНИЕ" : "НИЧЬЯ";
   const seriesScore = state.seriesScore ?? { player: 0, enemy: 0 };
+  const specialSourceCard = state.currentTurn?.discardPlayAvailable
+    ? state.player.discard.at(-1)
+    : state.currentTurn?.enemyDeckPlayCardId
+      ? state.enemy.deck.find((card) => card.instanceId === state.currentTurn?.enemyDeckPlayCardId)
+      : undefined;
+  const specialSlotIndex = state.board.playerSlots.findIndex((slot) => !slot);
+  const d20RuleText = state.lastRoll == null ? "БРОСЬ D20" : state.lastRoll <= 10
+    ? `МОЖНО СЫГРАТЬ ДО ${state.lastRoll} КАРТ`
+    : state.lastRoll <= 14 ? "МОЖНО СЫГРАТЬ 1 КАРТУ ИЗ СБРОСА"
+    : state.lastRoll <= 16 ? "РУЛЕТКА СУДЬБЫ"
+    : state.lastRoll <= 18 ? "БЕЗЛИМИТ КАРТ · WILL ×2"
+    : state.lastRoll === 19 ? "КАРТА ИЗ КОЛОДЫ СОПЕРНИКА"
+    : "ПРОБУЖДЕНИЕ";
 
   void onAiTurn;
 
@@ -232,6 +256,15 @@ export function MatchBoard({
         isOnlineMode={isOnlineMode}
         onRouletteComplete={onRoulettePresentationComplete}
       />
+      {state.rouletteState ? (
+        <FateRouletteOverlay
+          roulette={state.rouletteState}
+          localPlayerId="player"
+          onSpin={onRouletteSpin}
+          onReveal={onRouletteReveal}
+          onConfirm={onRouletteConfirm}
+        />
+      ) : null}
 
       <div className="matchArenaTopbar">
         <div className="matchTurnBlock">
@@ -246,6 +279,12 @@ export function MatchBoard({
           <strong>{state.lastRoll ?? "—"}</strong>
         </div>
       </div>
+      <div className="matchContextBanner" role="status" aria-live="polite">
+        <strong>{d20RuleText}</strong>
+        <span>КАРТЫ: {state.currentTurn?.cardsPlayed ?? 0} / {state.currentTurn?.d20Limit ?? "—"} · WILL: {state.player.will} / {state.player.maxWill}{state.currentTurn?.willCostMultiplier === 2 ? " · ×2 COST" : ""}</span>
+      </div>
+      {state.lastRoll === 20 && state.currentTurn && !state.currentTurn.awakeningChoice ? <div className="matchAwakeningChoice"><b>ПРОБУЖДЕНИЕ</b><button type="button" onClick={() => onChooseAwakening("freeCard")}>СЫГРАТЬ КАРТУ БЕСПЛАТНО</button><button type="button" disabled={!state.currentTurn.awakeningPassiveAvailable} onClick={() => onChooseAwakening("passive")}>АКТИВИРОВАТЬ ПАССИВКУ</button></div> : null}
+      {specialSourceCard ? <button className="matchSpecialSourceAction" type="button" disabled={specialSlotIndex < 0} onClick={() => onPlay(specialSourceCard.instanceId, Math.max(0, specialSlotIndex))}>{state.currentTurn?.discardPlayAvailable ? `СЫГРАТЬ ИЗ СБРОСА: ${getCardTitle(specialSourceCard)}` : "СЫГРАТЬ СЛУЧАЙНУЮ КАРТУ СОПЕРНИКА"}</button> : null}
 
       {state.activeRouletteEvent ? (
         <div className="matchRouletteNotice" role="status" aria-live="polite">
@@ -268,18 +307,18 @@ export function MatchBoard({
         <EnemyHandView count={state.enemy.hand.length} />
       </section>
 
-      <aside className="matchSideColumn matchPlayerZone" aria-label="Player character zone">
+      <aside className="matchSideColumn matchPlayerZone" aria-label="Player character zone" data-tutorial-id="player-hero">
         <HeroPanel player={state.player} label={playerName} alignment="left" />
       </aside>
 
-      <aside className="matchSideColumn matchEnemyZone" aria-label="Enemy character zone">
+      <aside className="matchSideColumn matchEnemyZone" aria-label="Enemy character zone" data-tutorial-id="enemy-hero">
         <HeroPanel player={state.enemy} label={enemyName} alignment="right" />
       </aside>
 
       <main className="matchFieldZone" aria-label="Central battlefield">
         <WillStrip player={state.enemy} label="Enemy" side="enemy" />
 
-        <section className="matchBoardPanel" data-drop-ready={selectedCardIsPlayable ? "true" : "false"}>
+        <section className="matchBoardPanel" data-drop-ready={selectedCardIsPlayable ? "true" : "false"} data-tutorial-id="field">
           <div className="matchBoardRow is-enemy">
             {state.board.enemySlots.map((card, index) => (
               <BoardSlot
@@ -306,19 +345,22 @@ export function MatchBoard({
                 index={index}
                 key={`player-${index}`}
                 valid={selectedCardIsPlayable}
+                onActivate={(slotIndex) => { if (selectedCardId) onPlay(selectedCardId, slotIndex); }}
               />
             ))}
           </div>
         </section>
       </main>
 
-      <section className="matchPlayerWillZone" aria-label="Player will">
+      <section className="matchPlayerWillZone" aria-label="Player will" data-tutorial-id="will">
         <WillStrip player={state.player} label="Player" side="player" />
       </section>
 
-      <section className="matchD20Zone" aria-label="D20 roll zone">
+      <section className="matchD20Zone" aria-label="D20 roll zone" data-tutorial-id="d20">
         <D20View value={state.lastRoll} onRoll={onRoll} disabled={!canRoll} />
+        <button className="matchD20HelpButton" type="button" onClick={() => setShowD20Help(true)} aria-label="Правила D20">?</button>
       </section>
+      {showD20Help ? <section className="matchD20Help" role="dialog" aria-modal="true"><header><b>D20 RULES</b><button onClick={() => setShowD20Help(false)}>×</button></header><dl><dt>1–10</dt><dd>До N карт</dd><dt>11–14</dt><dd>Карта из сброса</dd><dt>15–16</dt><dd>Рулетка Судьбы</dd><dt>17–18</dt><dd>Безлимит · Will ×2</dd><dt>19</dt><dd>Карта противника</dd><dt>20</dt><dd>Пробуждение</dd></dl></section> : null}
 
       <section className="matchPlayerActionZone is-auto-flow" aria-label="Match controls">
         <div className="matchActionStatus">
@@ -332,7 +374,7 @@ export function MatchBoard({
               Restart
             </button>
           ) : null}
-          <button className="matchGhostButton is-compact" type="button" onClick={onEndTurn} disabled={!canPlay}>
+          <button className="matchGhostButton is-compact" data-tutorial-id="end-turn" type="button" onClick={onEndTurn} disabled={!canPlay}>
             End Turn
           </button>
           <button className="matchGhostButton is-compact is-danger" type="button" onClick={onConcede} disabled={Boolean(state.winner)}>
@@ -361,7 +403,7 @@ export function MatchBoard({
         <DiscardPile cards={state.player.discard} owner="player" />
       </section>
 
-      <section className="matchPlayerHandZone" aria-label="Player hand area">
+      <section className="matchPlayerHandZone" aria-label="Player hand area" data-tutorial-id="hand">
         <HandView
           cards={state.player.hand}
           onPlay={onPlay}
