@@ -211,7 +211,8 @@ export function MatchBoard({
   const actionHint = getActionHint(state, selectedCard, aiThinking, interactionLocked);
   const winnerLabel = getWinnerLabel(state.winner, playerName, enemyName);
   const battleResultTitle = state.battleResult === "player" ? "ПОБЕДА" : state.battleResult === "enemy" ? "ПОРАЖЕНИЕ" : "НИЧЬЯ";
-  const seriesScore = state.seriesScore ?? { player: 0, enemy: 0 };\n  const battleNumber = Math.max(1, Math.min(3, state.battleNumber ?? 1));
+  const seriesScore = state.seriesScore ?? { player: 0, enemy: 0 };
+  const battleNumber = Math.max(1, Math.min(3, state.battleNumber ?? 1));
   const specialSourceCard = state.currentTurn?.discardPlayAvailable
     ? state.player.discard.at(-1)
     : state.currentTurn?.enemyDeckPlayCardId
