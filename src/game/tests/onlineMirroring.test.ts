@@ -42,7 +42,9 @@ function makeMirroredStates(seed = 1791745200000) {
 }
 
 function mirroredInstanceId(id: string) {
-  return id.replace(/^player_/, "enemy_").replace(/^enemy_/, "player_");
+  if (id.startsWith("player_")) return id.replace(/^player_/, "enemy_");
+  if (id.startsWith("enemy_")) return id.replace(/^enemy_/, "player_");
+  return id;
 }
 
 describe("online PvP mirrored state", () => {
