@@ -12,7 +12,7 @@ import type {
 import { runSimpleAI } from "../ai/SimpleAI";
 import { loadCardDefinitions } from "../data/cards";
 import { resolveCardEffects } from "./EffectResolver";
-import { rollDie, shuffleWithSeed } from "./Random";
+import { nextRandom, rollDie, shuffleWithSeed } from "./Random";
 import { canPayWill, initializeBattleWill, payWill, regenerateWillForTurn } from "./WillSystem";
 import { drawCards } from "./DrawSystem";
 import { resolveFieldCombat } from "./DamageSystem";
@@ -503,6 +503,12 @@ export function createInitialMatchState(payload: StartMatchPayload = {}): MatchS
       `${playerLabel(firstPlayerId)} starts in roll phase.`,
     ],
     rngSeed: seed,
+    onlineShuffleSeeds: hasExplicitOnlineSeeds
+      ? {
+          player: Number(payload.playerShuffleSeed),
+          enemy: Number(payload.enemyShuffleSeed),
+        }
+      : undefined,
     initiativeRolls,
     battleNumber: 1,
     seriesScore: { player: 0, enemy: 0 },
@@ -530,8 +536,22 @@ function collectBattleDefinitions(state: MatchState, playerId: PlayerId): CardDe
 function startNextBattle(state: MatchState, scores: Record<PlayerId, number>, reason: string): MatchState {
   const previousBattle = state.battleNumber ?? 1;
   const nextBattleNumber = previousBattle + 1;
+  const onlineSeeds = state.onlineShuffleSeeds;
+  const nextPlayerShuffleSeed = onlineSeeds
+    ? nextRandom((onlineSeeds.player ^ nextBattleNumber) >>> 0).seed
+    : undefined;
+  const nextEnemyShuffleSeed = onlineSeeds
+    ? nextRandom((onlineSeeds.enemy ^ nextBattleNumber) >>> 0).seed
+    : undefined;
+  const nextGameplaySeed = onlineSeeds
+    ? nextRandom((state.rngSeed ^ (0x6d2b79f5 + nextBattleNumber)) >>> 0).seed
+    : undefined;
+
   const nextBattle = createInitialMatchState({
     seed: state.rngSeed,
+    playerShuffleSeed: nextPlayerShuffleSeed,
+    enemyShuffleSeed: nextEnemyShuffleSeed,
+    gameplaySeed: nextGameplaySeed,
     playerDeck: collectBattleDefinitions(state, "player"),
     enemyDeck: collectBattleDefinitions(state, "enemy"),
     playerWillStats: { maxWill: state.player.maxWill, regenPerRound: state.player.willRegenPerRound },
