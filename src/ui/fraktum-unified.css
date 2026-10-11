@@ -694,3 +694,45 @@
     grid-column: auto;
   }
 }
+
+
+/* ---------- Online Supabase auth gate ---------- */
+.onlineAuthGate {
+  width: min(720px, 100%);
+  margin: 16px auto 4px;
+  padding: 14px;
+  border: 2px solid var(--fr-border);
+  background: #080d1c;
+  box-shadow: 3px 3px 0 var(--fr-shadow);
+}
+
+.onlineAuthGateCopy {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 12px;
+  text-align: left;
+}
+
+.onlineAuthGateCopy > span {
+  color: var(--fr-gold-soft);
+  font: 900 10px var(--fr-font);
+  letter-spacing: .15em;
+}
+
+.onlineAuthGateCopy > b {
+  color: var(--fr-text);
+  font: 900 18px var(--fr-font);
+}
+
+.onlineAuthGateCopy > p {
+  margin: 0;
+  color: var(--fr-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.onlineMatchmakingActions button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(.35);
+}
