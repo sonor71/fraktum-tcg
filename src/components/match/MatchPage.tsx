@@ -1712,7 +1712,7 @@ export default function MatchPage() {
               <div className="onlineAuthGateCopy">
                 <span>НУЖНА АВТОРИЗАЦИЯ</span>
                 <b>Войди в FRAKTUM Cloud</b>
-                <p>Локальный ник «${playerName}» не является аккаунтом Supabase. Вход нужен только один раз — сессия сохранится в браузере.</p>
+                <p>Локальный ник «{playerName}» не является аккаунтом Supabase. Вход нужен только один раз — сессия сохранится в браузере.</p>
               </div>
               <CloudAccountPanel />
             </div>
