@@ -213,7 +213,7 @@ export async function syncSupabaseSessionFromLauncher() {
   try { candidates.push(await window.sb?.getSession?.()); } catch (error) { console.warn("[FRAKTUM] sb.getSession failed", error); }
 
   const session = candidates.find(isSessionForCurrentProject);
-  if (!session) return null;
+  if (!hasTokens(session) || !isSessionForCurrentProject(session)) return null;
 
   const { data, error } = await supabase.auth.setSession({
     access_token: session.access_token,
