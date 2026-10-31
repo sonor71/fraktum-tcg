@@ -21,6 +21,7 @@ import {
   cardRequiresBoardSlot,
   getCardBoardMaxHp,
   getCardCost,
+  getCardCurrentHp,
   getEffectiveCardCost,
   getCardTitle,
   getRequestedOrFreeSlotIndex,
@@ -32,7 +33,7 @@ import {
   slotsKey,
 } from "./TurnManager";
 
-import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, NO_CARD_PENALTY_DAMAGE, BASE_TURN_SECONDS, DECK_SIZE, getD20PlayLimit, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
+import { DEFAULT_MAX_WILL, DEFAULT_WILL_REGEN, HAND_LIMIT, STARTING_HAND_SIZE, NO_CARD_PENALTY_DAMAGE, BASE_TURN_SECONDS, DECK_SIZE, getD20PlayLimit, getD20Rule, getMatchWinner, isFateRouletteRoll, scoreBattleResult } from "./Rules";
 import { FATE_ROULETTE_RESULT_READ_MS, addRouletteEvent, applyFateRouletteEvent, createFateRouletteState, getFateRouletteConfirmRemainingMs, revealFateRouletteResult, spinFateRoulette } from "./FateRoulette";
 const LOG_LIMIT = 80;
 const ENGINE_EVENT_LIMIT = 200;
@@ -297,8 +298,16 @@ export function effectAmount(effect: Record<string, unknown>, fallback = 0) {
 }
 
 function dealDirectHeroDamage(state: MatchState, playerId: PlayerId, damage: number, source: string): MatchState {
-  const amount = Math.max(0, Math.floor(damage));
+  let amount = Math.max(0, Math.floor(damage));
   if (amount <= 0) return state;
+
+  const protectionKey = `${state.activePlayerId}:${state.turn}:${state[state.activePlayerId].personalTurnsTaken ?? 0}`;
+  const primeActive = state.board[slotsKey(playerId)].some((card) =>
+    (card?.baseId === "prime" || card?.definition.id === "prime") && getCardCurrentHp(card) > 0,
+  );
+  const primeCanProtect = primeActive && state.primeProtectionUsed?.[playerId] !== protectionKey;
+  const blocked = primeCanProtect ? Math.min(2, amount) : 0;
+  amount -= blocked;
 
   const side = state[playerId];
   const before = Math.max(0, Number(side.hp ?? 0));
@@ -307,13 +316,16 @@ function dealDirectHeroDamage(state: MatchState, playerId: PlayerId, damage: num
   return log(
     {
       ...state,
+      primeProtectionUsed: primeCanProtect
+        ? { ...state.primeProtectionUsed, [playerId]: protectionKey }
+        : state.primeProtectionUsed,
       [playerId]: {
         ...side,
         hp: after,
         lastTurnLostHp: Math.max(0, Number(side.lastTurnLostHp ?? 0)) + Math.max(0, before - after),
       },
     },
-    `[DMG] ${source} dealt ${amount} damage to ${playerLabel(playerId)}.`,
+    `[DMG] ${source} dealt ${amount} damage to ${playerLabel(playerId)}${blocked > 0 ? ` after Prime blocked ${blocked}` : ""}.`,
   );
 }
 
@@ -354,6 +366,17 @@ function triggerTurnStartEffects(state: MatchState, playerId: PlayerId): MatchSt
   for (const effect of effects) {
     const id = normalizeEffectId(effect.id);
     const source = String(effect.source ?? "effect");
+
+    if (id === "hero_silhouette_next_will") {
+      const activatesAt = safeInteger(effect.activatesAtPersonalTurn, Number.MAX_SAFE_INTEGER);
+      if ((next[playerId].personalTurnsTaken ?? 0) >= activatesAt) {
+        const side = next[playerId];
+        const will = Math.min(side.maxWill, side.will + effectAmount(effect, 1));
+        next = setSideEffects({ ...next, [playerId]: { ...side, will } }, playerId, getSideEffects(next, playerId).filter((candidate) => candidate !== effect));
+        next = log(next, `${source} granted ${playerLabel(playerId)} +${will - side.will} Will.`);
+      }
+      continue;
+    }
 
     if (id === "psychological_disorder") {
       const roll = rollDie(next.rngSeed, 2);
@@ -565,9 +588,11 @@ export function dispatch(state: MatchState, action: GameAction): MatchState {
       case "START_MATCH":
         return log(startMatch(action.payload), "NEW_MATCH_RESTARTED Score reset: 0:0");
       case "ROLL_D20":
-        return rollD20(state, action.playerId);
+        return rollD20(state, action.playerId, action.forcedRoll);
       case "PLAY_CARD":
         return playCard(state, action.playerId, action.cardInstanceId, action.target);
+      case "CHOOSE_AWAKENING":
+        return chooseAwakening(state, action.playerId, action.choice);
       case "PLAY_BLIND_TOP_CARD":
         return playBlindTopCard(state, action.playerId, action.target);
       case "SPIN_FATE_ROULETTE":
@@ -614,8 +639,10 @@ function beginTurnIfNeeded(state: MatchState, playerId: PlayerId): MatchState {
   return next;
 }
 
-function rollD20ForLimit(state: MatchState, options: { allowRoulette: boolean } = { allowRoulette: true }): { state: MatchState; roll: number; rouletteActivated: boolean } {
-  let roll = rollDie(state.rngSeed, 20);
+function rollD20ForLimit(state: MatchState, options: { allowRoulette: boolean; forcedRoll?: number } = { allowRoulette: true }): { state: MatchState; roll: number; rouletteActivated: boolean } {
+  let roll = options.forcedRoll && options.forcedRoll >= 1 && options.forcedRoll <= 20
+    ? { value: Math.floor(options.forcedRoll), seed: state.rngSeed }
+    : rollDie(state.rngSeed, 20);
   let next: MatchState = log({ ...state, rngSeed: roll.seed }, `[D20_INITIAL_ROLL] ${roll.value}.`);
 
   if (options.allowRoulette && isFateRouletteRoll(roll.value) && !next.rouletteUsedThisBattle) {
@@ -633,7 +660,7 @@ function rollD20ForLimit(state: MatchState, options: { allowRoulette: boolean } 
   return { state: next, roll: roll.value, rouletteActivated: false };
 }
 
-export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
+export function rollD20(state: MatchState, playerId: PlayerId, forcedRoll?: number): MatchState {
   if (state.activePlayerId !== playerId) return log(state, `It is not ${playerLabel(playerId)}'s roll.`);
   if (playerId === "player" && state.phase !== "roll") return log(state, "Player can roll only during roll phase.");
   if (playerId === "enemy" && state.phase !== "enemy") return log(state, "AI can roll only during enemy phase.");
@@ -641,7 +668,7 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
   const started = beginTurnIfNeeded(state, playerId);
   const skip = consumeSkipTurn(started, playerId);
   if (skip.skipped) return endTurn(skip.state, playerId);
-  const result = rollD20ForLimit(skip.state);
+  const result = rollD20ForLimit(skip.state, { allowRoulette: true, forcedRoll });
   if (result.rouletteActivated && isFateRouletteRoll(result.roll)) {
     return createFateRouletteState({
       ...result.state,
@@ -661,7 +688,14 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
     }, playerId, result.roll);
   }
   const d20Limit = getD20PlayLimit(result.roll);
-  const freeCards = result.roll === 20 || result.state.activeRouletteEvent === "WORLD_WITHOUT_WILL";
+  const rule = getD20Rule(result.roll);
+  const freeCards = result.state.activeRouletteEvent === "WORLD_WITHOUT_WILL";
+  const opponentId = otherPlayer(playerId);
+  const opponentDeck = result.state[opponentId].deck;
+  const enemyDeckPlayCardId = rule === "enemyDeck" && opponentDeck.length > 0
+    ? opponentDeck[result.state.rngSeed % opponentDeck.length]?.instanceId
+    : undefined;
+  const awakeningPassiveAvailable = rule === "awakening" && result.state.board[slotsKey(playerId)].some(Boolean);
   let afterRoll: MatchState = {
     ...result.state,
     lastRoll: result.roll,
@@ -672,6 +706,10 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
       cardsPlayed: 0,
       destroyedOwnCard: false,
       freeCards,
+      willCostMultiplier: rule === "doubleWill" ? 2 : 1,
+      discardPlayAvailable: rule === "discard" && result.state[playerId].discard.length > 0,
+      enemyDeckPlayCardId,
+      awakeningPassiveAvailable,
       rouletteResolvedThisTurn: result.rouletteActivated,
       skipDamageApplied: false,
       timerSeconds: BASE_TURN_SECONDS,
@@ -695,8 +733,21 @@ export function rollD20(state: MatchState, playerId: PlayerId): MatchState {
       ...afterCombat,
       phase: playerId === "player" ? "main" : "enemy",
     },
-    `${playerLabel(playerId)} rolled D20: ${result.roll}. Play limit: ${d20Limit === "unlimited" ? "unlimited" : d20Limit}${freeCards ? ", cards are free this turn" : ""}.`,
+    `${playerLabel(playerId)} rolled D20: ${result.roll}. Rule: ${rule}. Play limit: ${d20Limit === "unlimited" ? "unlimited" : d20Limit}${rule === "doubleWill" ? ", Will costs x2" : ""}.`,
   );
+}
+
+export function chooseAwakening(state: MatchState, playerId: PlayerId, choice: "freeCard" | "passive"): MatchState {
+  const turn = state.currentTurn;
+  if (state.lastRoll !== 20 || !turn || turn.playerId !== playerId || turn.awakeningChoice) return log(state, "Awakening is not available.");
+  if (choice === "passive") {
+    if (!turn.awakeningPassiveAvailable) return log(state, "No passive is available to reactivate.");
+    const card = state.board[slotsKey(playerId)].find((item): item is CardInstance => Boolean(item));
+    if (!card) return state;
+    const next = resolveCardEffects({ ...state, currentTurn: { ...turn, awakeningChoice: choice, awakeningPassiveAvailable: false } }, playerId, card, undefined, card.slotIndex);
+    return log(next, `Awakening reactivated ${getCardTitle(card)}.`);
+  }
+  return log({ ...state, currentTurn: { ...turn, awakeningChoice: choice, freeCards: true, awakeningPassiveAvailable: false } }, "Awakening: the next card costs 0 Will.");
 }
 
 export function confirmFateRouletteResult(state: MatchState, playerId: PlayerId, rouletteId: string): MatchState {
@@ -794,9 +845,29 @@ export function playCard(
     return log(playBlock.state, "[BLIND_TOP] Cards from hand cannot be played while Blind Top is active.");
   }
 
-  const card = side.hand.find((candidate) => candidate.instanceId === cardInstanceId);
+  const handCard = side.hand.find((candidate) => candidate.instanceId === cardInstanceId);
+  const discardCard = playBlock.state.currentTurn?.discardPlayAvailable
+    ? side.discard.find((candidate) => candidate.instanceId === cardInstanceId)
+    : undefined;
+  const opponentId = otherPlayer(playerId);
+  const enemyDeckCard = playBlock.state.currentTurn?.enemyDeckPlayCardId === cardInstanceId
+    ? playBlock.state[opponentId].deck.find((candidate) => candidate.instanceId === cardInstanceId)
+    : undefined;
+  const card = handCard ?? discardCard ?? enemyDeckCard;
 
-  if (!card) return log(state, "Card is not in hand.");
+  if (!card) return log(state, "Card is not available from hand, discard, or the opponent deck.");
+
+  const cardId = card.baseId || card.definition.id;
+  if (cardId === "healing") {
+    if (target?.type !== "slot" || target.playerId !== playerId || typeof target.slotIndex !== "number" || !playBlock.state.board[slotsKey(playerId)][target.slotIndex]) {
+      return log(state, "Healing requires a friendly card on the field.");
+    }
+  }
+  if (cardId === "clean_sheet") {
+    if (target?.type !== "hand" || target.playerId !== playerId || target.cardInstanceId === card.instanceId || !side.hand.some((candidate) => candidate.instanceId === target.cardInstanceId)) {
+      return log(state, "Clean Sheet requires another selected card in your hand.");
+    }
+  }
 
   const turnState = playBlock.state.currentTurn ?? { playerId, d20Limit: "unlimited" as const, playsUsed: 0, cardsPlayed: 0, destroyedOwnCard: false, freeCards: false, skipDamageApplied: false, timerSeconds: BASE_TURN_SECONDS, playedCosts: [] };
   if (turnState.d20Limit !== "unlimited" && turnState.playsUsed >= turnState.d20Limit) return log(state, "D20 play limit has been reached.");
@@ -830,13 +901,18 @@ export function playCard(
     board: { ...playBlock.state.board, [ownSlotsKey]: currentSlots },
     [playerId]: {
       ...paidSide,
-      hand: removeFromHand(side.hand, cardInstanceId),
+      hand: handCard ? removeFromHand(side.hand, cardInstanceId) : side.hand,
+      discard: discardCard ? side.discard.filter((candidate) => candidate.instanceId !== cardInstanceId) : side.discard,
     },
+    ...(enemyDeckCard ? { [opponentId]: { ...playBlock.state[opponentId], deck: playBlock.state[opponentId].deck.filter((candidate) => candidate.instanceId !== cardInstanceId) } } : {}),
     currentTurn: {
       ...turnState,
       playsUsed: turnState.playsUsed + 1,
       cardsPlayed: turnState.cardsPlayed + 1,
       playedCosts: [...turnState.playedCosts, { playerId, cardTitle: getCardTitle(card), cost: printedCost }],
+      discardPlayAvailable: discardCard ? false : turnState.discardPlayAvailable,
+      enemyDeckPlayCardId: enemyDeckCard ? undefined : turnState.enemyDeckPlayCardId,
+      freeCards: turnState.awakeningChoice === "freeCard" ? false : turnState.freeCards,
     },
   };
 
@@ -926,12 +1002,12 @@ export function endTurn(state: MatchState, playerId: PlayerId): MatchState {
 
   let endingState = cleanupTemporaryCards(state, playerId);
   const turnState = endingState.currentTurn;
-  if (turnState?.playerId === playerId && turnState.cardsPlayed === 0 && !turnState.skipDamageApplied) {
-    endingState = dealDirectHeroDamage(endingState, playerId, NO_CARD_PENALTY_DAMAGE, "No-card penalty");
+  if (turnState?.playerId === playerId && endingState[playerId].hand.length === 0 && endingState[playerId].deck.length === 0 && !turnState.skipDamageApplied) {
+    endingState = dealDirectHeroDamage(endingState, playerId, NO_CARD_PENALTY_DAMAGE, "Deck exhaustion");
     endingState = { ...endingState, currentTurn: { ...turnState, skipDamageApplied: true } };
   }
   endingState = checkWinCondition(endingState);
-  if (endingState.phase === "ended") return endingState;
+  if (endingState.phase === "ended" || endingState.phase === "betweenBattles") return endingState;
 
   const nextPlayer = otherPlayer(playerId);
   let next: MatchState = {
@@ -969,6 +1045,7 @@ function finishByHpComparison(state: MatchState, reason: string): MatchState {
 }
 
 export function checkWinCondition(state: MatchState): MatchState {
+  if (state.battleResult || state.phase === "betweenBattles" || state.phase === "ended") return state;
   if (state.player.hp <= 0 && state.enemy.hp <= 0) {
     return finishByHpComparison(state, "Both heroes fell.");
   }
@@ -983,4 +1060,3 @@ export function checkWinCondition(state: MatchState): MatchState {
 
   return state;
 }
-

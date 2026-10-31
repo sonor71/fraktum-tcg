@@ -1,7 +1,7 @@
 import type { GameAction } from "../core/GameAction";
 import type { CardInstance, MatchState } from "../core/types";
 import { confirmFateRouletteResult, endTurn, playBlindTopCard, playCard, rollD20 } from "../engine/MatchEngine";
-import { getFateRouletteConfirmRemainingMs, spinFateRoulette } from "../engine/FateRoulette";
+import { FATE_ROULETTE_RESULT_READ_MS, revealFateRouletteResult, spinFateRoulette } from "../engine/FateRoulette";
 import {
   canPlayerMakeAnyMove,
   cardRequiresBoardSlot,
@@ -45,7 +45,15 @@ function scoreAiCard(card: CardInstance) {
 }
 
 function chooseAiCard(state: MatchState): CardInstance | undefined {
-  const playable = getPlayableCards(state, "enemy");
+  const playable = getPlayableCards(state, "enemy").filter((card) => {
+    if (card.baseId === "healing") {
+      return state.board.enemySlots.some((ally) => ally && ally.currentHealth < getCardBoardMaxHp(ally));
+    }
+    if (card.baseId === "clean_sheet") {
+      return state.enemy.hand.some((other) => other.instanceId !== card.instanceId);
+    }
+    return true;
+  });
   if (playable.length === 0) return undefined;
 
   const bestByScore = [...playable].sort((a, b) => scoreAiCard(b) - scoreAiCard(a))[0];
@@ -58,8 +66,8 @@ export function planNextAiAction(state: MatchState): GameAction | null {
     const roulette = state.rouletteState;
     if (!roulette || roulette.ownerId !== "enemy") return null;
     if (roulette.stage === "awaitingSpin") return { type: "SPIN_FATE_ROULETTE", playerId: "enemy", rouletteId: roulette.id };
+    if (roulette.stage === "spinning") return { type: "REVEAL_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: roulette.id, revealedAtMs: Date.now() };
     if (roulette.stage === "result") {
-      if (getFateRouletteConfirmRemainingMs(state, Date.now()) > 0) return null;
       return { type: "CONFIRM_FATE_ROULETTE_RESULT", playerId: "enemy", rouletteId: roulette.id };
     }
     return null;
@@ -81,12 +89,22 @@ export function planNextAiAction(state: MatchState): GameAction | null {
   const requiresSlot = cardRequiresBoardSlot(chosen);
   const slotIndex = requiresSlot ? getPreferredFreeSlotIndex(state, "enemy") : -1;
   if (requiresSlot && slotIndex < 0) return { type: "END_TURN", playerId: "enemy" };
+  const healingSlot = chosen.baseId === "healing"
+    ? state.board.enemySlots.findIndex((ally) => ally && ally.currentHealth < getCardBoardMaxHp(ally))
+    : -1;
+  const cleanSheetDiscard = chosen.baseId === "clean_sheet"
+    ? state.enemy.hand.find((other) => other.instanceId !== chosen.instanceId)
+    : undefined;
 
   return {
     type: "PLAY_CARD",
     playerId: "enemy",
     cardInstanceId: chosen.instanceId,
-    target: requiresSlot ? { type: "slot", playerId: "enemy", slotIndex } : undefined,
+    target: healingSlot >= 0
+      ? { type: "slot", playerId: "enemy", slotIndex: healingSlot }
+      : cleanSheetDiscard
+        ? { type: "hand", playerId: "enemy", cardInstanceId: cleanSheetDiscard.instanceId }
+        : requiresSlot ? { type: "slot", playerId: "enemy", slotIndex } : undefined,
   };
 }
 
@@ -100,6 +118,7 @@ export function runSimpleAI(state: MatchState): MatchState {
     if (!action) return next;
     if (action.type === "ROLL_D20") next = rollD20(next, "enemy");
     else if (action.type === "SPIN_FATE_ROULETTE") next = spinFateRoulette(next, "enemy", action.rouletteId);
+    else if (action.type === "REVEAL_FATE_ROULETTE_RESULT") next = revealFateRouletteResult(next, "enemy", action.rouletteId, Date.now() - FATE_ROULETTE_RESULT_READ_MS);
     else if (action.type === "CONFIRM_FATE_ROULETTE_RESULT") next = confirmFateRouletteResult(next, "enemy", action.rouletteId);
     else if (action.type === "PLAY_BLIND_TOP_CARD") next = playBlindTopCard(next, "enemy", action.target);
     else if (action.type === "PLAY_CARD") {

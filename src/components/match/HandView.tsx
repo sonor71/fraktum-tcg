@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { CSSProperties, PointerEvent } from "react";
 import type { CardInstance } from "../../game/core/types";
 import { CardView } from "./CardView";
+import { openCardPassport } from "../CardPassport";
 
 type HandViewProps = {
   cards: CardInstance[];
@@ -12,6 +13,7 @@ type HandViewProps = {
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
   onInvalidDrop?: (message: string) => void;
+  onHandTarget?: (sourceCardId: string, targetCardId: string) => void;
 };
 
 type DragState = {
@@ -125,6 +127,7 @@ export function HandView({
   selectedId,
   onSelect,
   onInvalidDrop,
+  onHandTarget,
 }: HandViewProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragCard = useMemo(
@@ -200,6 +203,21 @@ export function HandView({
       setDrag(null);
 
       if (dropSlot === null) {
+        if (!shouldTreatAsDrag && releasedCard) {
+          const selectedCard = cards.find((card) => card.instanceId === selectedId);
+          if (selectedCard?.baseId === "clean_sheet" && releasedCard.instanceId !== selectedCard.instanceId) {
+            onHandTarget?.(selectedCard.instanceId, releasedCard.instanceId);
+            return;
+          }
+          openCardPassport({
+            baseId: releasedCard.baseId,
+            instanceId: releasedCard.instanceId,
+            frontImage: releasedCard.definition.image,
+            actionLabel: "СЫГРАТЬ",
+            actionDisabledReason: disabled ? "Сейчас эту карту сыграть нельзя." : undefined,
+            onAction: () => onSelect?.(releasedCard.instanceId),
+          });
+        }
         if (shouldTreatAsDrag) {
           const cardName = releasedCard ? getCardTitle(releasedCard) : "Card";
           onInvalidDrop?.(`${cardName}: drop on an empty player slot.`);
@@ -231,7 +249,7 @@ export function HandView({
       window.removeEventListener("pointercancel", finishDrag);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [cards, drag, onInvalidDrop, onPlay]);
+  }, [cards, disabled, drag, onHandTarget, onInvalidDrop, onPlay, onSelect, selectedId]);
 
   if (cards.length === 0) {
     return (
