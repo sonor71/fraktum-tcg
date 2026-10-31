@@ -6,12 +6,14 @@ import { getWillCostByRarity } from "../rarityWillCost";
 function toEngineCardDefinition(card: CatalogCardDefinition): CardDefinition {
   const bonusEffects = card.type === "bonus" ? [{ op: "bonus", percent: 10 }] : undefined;
   const hasBoardHp = Math.max(0, Math.floor(Number(card.health ?? 0))) > 0;
+  const resolvesWithoutBoardSlot = new Set(["healing", "tsunami", "clean_sheet", "hero_silhouette"]).has(card.id);
 
   const willCost = getWillCostByRarity(card.rarity);
 
   return {
     id: card.id,
     title: card.title,
+    ruTitle: card.ruTitle,
     type: card.type,
     rarity: card.rarity,
     cost: willCost,
@@ -24,7 +26,7 @@ function toEngineCardDefinition(card: CatalogCardDefinition): CardDefinition {
     effectKey: card.effectKey,
     effects: bonusEffects,
     collection: card.collection,
-    requiresBoardSlot: card.type !== "character" && card.type !== "bonus",
+    requiresBoardSlot: !resolvesWithoutBoardSlot && card.type !== "character" && card.type !== "bonus",
     leavesAtTurnEnd: !hasBoardHp,
     canAttack: hasBoardHp && card.attack > 0,
     scalableByElementBonus: card.type === "attack" || card.type === "event",

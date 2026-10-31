@@ -340,7 +340,7 @@ function getExplicitEffects(card: CardInstance): RawEffect[] {
 }
 
 function getKnownCardEffects(card: CardInstance): RawEffect[] {
-  const attack = Math.max(1, getPrintedAttack(card) || getDefinitionPower(card, 1));
+  const attack = getPrintedAttack(card);
 
   switch (card.baseId || card.definition.id) {
     case "energy_sword": return [{ op: "damageFront", amount: 3 }, { op: "damageHero", amount: 2, target: "enemyHero" }];
@@ -380,6 +380,12 @@ function getKnownCardEffects(card: CardInstance): RawEffect[] {
     case "armor_of_chaos": return [{ op: "blockSmallDamage", amount: 3, target: "self" }];
     case "titan_eye": return [{ op: "reduceNextEnemyCardPower", percent: 20 }];
     case "Stun_Gun": return [{ op: "stunGunAura" }];
+    case "elite_knight": return [{ op: "damageOppositeCardOnly", amount: 4 }];
+    case "healing": return [{ op: "healFriendlyCard", amount: 3 }];
+    case "tsunami": return [{ op: "damageAllEnemySlots", min: 2, max: 2 }];
+    case "clean_sheet": return [{ op: "discardSelectedFriendlyHandAndDraw", amount: 2 }];
+    case "hero_silhouette": return [{ op: "heroSilhouette", amount: 3 }];
+    case "prime": return [{ op: "primeAura" }];
     default:
       break;
   }
@@ -606,17 +612,28 @@ function damageHero(
   }
 
   const side = state[targetPlayerId];
-  const shieldBlocked = Math.min(Math.max(0, side.shield ?? 0), amount);
-  const damageAfterShield = Math.max(0, amount - shieldBlocked);
+  const protectionKey = `${state.activePlayerId}:${state.turn}:${state[state.activePlayerId].personalTurnsTaken ?? 0}`;
+  const primeIsActive = state.board[slotsKey(targetPlayerId)].some((card) =>
+    (card?.baseId === "prime" || card?.definition.id === "prime") && getCardCurrentHp(card) > 0,
+  );
+  const primeCanProtect = primeIsActive && state.primeProtectionUsed?.[targetPlayerId] !== protectionKey;
+  const primeBlocked = primeCanProtect ? Math.min(2, amount) : 0;
+  const afterPrime = amount - primeBlocked;
+  const shieldBlocked = Math.min(Math.max(0, side.shield ?? 0), afterPrime);
+  const damageAfterShield = Math.max(0, afterPrime - shieldBlocked);
   const nextShield = Math.max(0, (side.shield ?? 0) - shieldBlocked);
   const nextHp = Math.max(0, side.hp - damageAfterShield);
 
-  let next = updateSide(state, targetPlayerId, {
+  let next = updateSide(primeCanProtect ? {
+    ...state,
+    primeProtectionUsed: { ...state.primeProtectionUsed, [targetPlayerId]: protectionKey },
+  } : state, targetPlayerId, {
     hp: nextHp,
     shield: nextShield,
     lastTurnLostHp: (side.lastTurnLostHp ?? 0) + damageAfterShield,
   });
 
+  if (primeBlocked > 0) next = log(next, `Prime reduced the first hero damage this turn by ${primeBlocked}.`);
   if (shieldBlocked > 0) next = log(next, `${playerLabel(targetPlayerId)} shield blocked ${shieldBlocked} damage.`);
   next = log(next, damageAfterShield > 0 ? `${sourceName} dealt ${damageAfterShield} damage to ${playerLabel(targetPlayerId)} hero.` : `${sourceName} dealt no hero damage.`);
   return next;
@@ -958,6 +975,43 @@ function applyEffect(
   const op = readOp(effect);
   const sourceName = getCardTitle(sourceCard);
   const amount = readAmount(effect, getPrintedAttack(sourceCard) || 1);
+
+  if (op.includes("damageoppositecardonly")) {
+    const enemyId = otherPlayer(playerId);
+    const opposing = state.board[slotsKey(enemyId)][playedSlotIndex];
+    return opposing
+      ? damageSlot(state, enemyId, playedSlotIndex, amount, sourceName)
+      : log(state, `${sourceName} found no enemy card opposite it.`);
+  }
+  if (op.includes("healfriendlycard")) {
+    const slotIndex = getSlotFromTarget(target, playerId);
+    return typeof slotIndex === "number"
+      ? healSlot(state, playerId, slotIndex, amount, sourceName)
+      : log(state, `${sourceName} requires a friendly card target.`);
+  }
+  if (op.includes("discardselectedfriendlyhandanddraw")) {
+    if (target?.type !== "hand" || target.playerId !== playerId || target.cardInstanceId === sourceCard.instanceId) {
+      return log(state, `${sourceName} requires another card from its owner's hand.`);
+    }
+    const side = state[playerId];
+    const discarded = side.hand.find((card) => card.instanceId === target.cardInstanceId);
+    if (!discarded) return log(state, `${sourceName} could not find the selected hand card.`);
+    const afterDiscard = updateSide(state, playerId, {
+      hand: side.hand.filter((card) => card.instanceId !== discarded.instanceId),
+      discard: [...side.discard, discarded],
+    });
+    return drawCardsForSide(log(afterDiscard, `${sourceName} discarded ${getCardTitle(discarded)}.`), playerId, amount, sourceName);
+  }
+  if (op.includes("herosilhouette")) {
+    const shielded = addShield(state, playerId, amount, sourceName);
+    return addTimedEffect(shielded, playerId, {
+      id: "hero_silhouette_next_will",
+      source: sourceName,
+      activatesAtPersonalTurn: (state[playerId].personalTurnsTaken ?? 0) + 1,
+      amount: 1,
+    }, `${sourceName} will grant +1 Will at the start of the next own turn.`);
+  }
+  if (op.includes("primeaura")) return log(state, `${sourceName} protects the first hero damage each turn while it remains on the field.`);
 
   if (op.includes("halveenemywill")) return modifyWill(state, otherPlayer(playerId), -Math.ceil(state[otherPlayer(playerId)].will / 2), sourceName);
   if (op.includes("damageenemyheropercent")) return damageHero(state, otherPlayer(playerId), Math.max(1, Math.floor(state[otherPlayer(playerId)].hp * amount / 100)), playerId, sourceName);

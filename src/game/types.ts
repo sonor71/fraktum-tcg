@@ -29,6 +29,7 @@ export type CardKind = CardType;
 export interface CardDefinition {
   id: string;
   title: string;
+  ruTitle?: string;
   name?: string;
   type: CardType;
   rarity: CardRarity;
@@ -41,6 +42,8 @@ export interface CardDefinition {
   frontSrc?: string;
   effectKey: string;
   collection: string;
+  element?: "fire" | "ice" | "lightning" | "water" | "void" | "neutral";
+  usageRules?: string;
 }
 
 export interface OwnedCard {

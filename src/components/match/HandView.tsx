@@ -13,6 +13,7 @@ type HandViewProps = {
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
   onInvalidDrop?: (message: string) => void;
+  onHandTarget?: (sourceCardId: string, targetCardId: string) => void;
 };
 
 type DragState = {
@@ -126,6 +127,7 @@ export function HandView({
   selectedId,
   onSelect,
   onInvalidDrop,
+  onHandTarget,
 }: HandViewProps) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragCard = useMemo(
@@ -202,6 +204,11 @@ export function HandView({
 
       if (dropSlot === null) {
         if (!shouldTreatAsDrag && releasedCard) {
+          const selectedCard = cards.find((card) => card.instanceId === selectedId);
+          if (selectedCard?.baseId === "clean_sheet" && releasedCard.instanceId !== selectedCard.instanceId) {
+            onHandTarget?.(selectedCard.instanceId, releasedCard.instanceId);
+            return;
+          }
           openCardPassport({
             baseId: releasedCard.baseId,
             instanceId: releasedCard.instanceId,
@@ -242,7 +249,7 @@ export function HandView({
       window.removeEventListener("pointercancel", finishDrag);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [cards, disabled, drag, onInvalidDrop, onPlay, onSelect]);
+  }, [cards, disabled, drag, onHandTarget, onInvalidDrop, onPlay, onSelect, selectedId]);
 
   if (cards.length === 0) {
     return (

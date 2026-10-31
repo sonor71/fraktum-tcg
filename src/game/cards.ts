@@ -92,6 +92,7 @@ function parseCard(value: unknown, index: number): CardDefinition {
   return {
     id,
     title,
+    ruTitle: typeof raw.ruTitle === "string" && raw.ruTitle.trim() ? raw.ruTitle.trim() : undefined,
     name: title,
     type,
     rarity,
@@ -104,6 +105,8 @@ function parseCard(value: unknown, index: number): CardDefinition {
     frontSrc: image,
     effectKey: requireString(raw.effectKey, "effectKey", index),
     collection: requireString(raw.collection, "collection", index),
+    element: typeof raw.element === "string" ? raw.element as CardDefinition["element"] : undefined,
+    usageRules: typeof raw.usageRules === "string" ? raw.usageRules : undefined,
   };
 }
 

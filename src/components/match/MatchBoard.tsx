@@ -28,6 +28,7 @@ type MatchBoardProps = {
   onSelectCard: (id: string | null) => void;
   onRoll: () => void;
   onPlay: (id: string, slotIndex: number) => void;
+  onPlayHandTarget: (sourceId: string, targetId: string) => void;
   onPlayTopCard: () => void;
   onInvalidDrop: (message: string) => void;
   onEndTurn: () => void;
@@ -162,6 +163,7 @@ export function MatchBoard({
   onSelectCard,
   onRoll,
   onPlay,
+  onPlayHandTarget,
   onPlayTopCard,
   onInvalidDrop,
   onEndTurn,
@@ -203,6 +205,7 @@ export function MatchBoard({
     !blindTopActive &&
     state.player.will >= getEffectiveCardCost(state, "player", selectedCard),
   );
+  const healingTargetMode = selectedCard?.baseId === "healing";
   const playerName = getHeroName(state.player, "Brian");
   const isOnlineMode = matchMode === "online";
   const enemyName = isOnlineMode && opponentName?.trim() ? opponentName.trim() : getHeroName(state.enemy, "Felix");
@@ -345,6 +348,7 @@ export function MatchBoard({
                 index={index}
                 key={`player-${index}`}
                 valid={selectedCardIsPlayable}
+                targetable={Boolean(healingTargetMode && card && selectedCardIsPlayable)}
                 onActivate={(slotIndex) => { if (selectedCardId) onPlay(selectedCardId, slotIndex); }}
               />
             ))}
@@ -412,6 +416,7 @@ export function MatchBoard({
           selectedId={selectedCardId}
           onSelect={onSelectCard}
           onInvalidDrop={onInvalidDrop}
+          onHandTarget={onPlayHandTarget}
         />
       </section>
 

@@ -105,7 +105,13 @@ export const PACKS: PackMeta[] = [
       "unrequited_love",
       "armor_of_chaos",
       "titan_eye",
-      "electroshocker"
+      "electroshocker",
+      "elite_knight",
+      "hero_silhouette",
+      "healing",
+      "prime",
+      "clean_sheet",
+      "tsunami"
 ],
   },
 ];

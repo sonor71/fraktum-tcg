@@ -535,6 +535,9 @@ function mapOnlineActionForLocalClient(event: OnlineMatchActionEvent, ownSeat: O
     if ("playerId" in targetRecord) {
       targetRecord.playerId = remapOnlinePlayerId(targetRecord.playerId, isOwnAction);
     }
+    if (typeof targetRecord.cardInstanceId === "string") {
+      targetRecord.cardInstanceId = remapOnlineCardInstanceId(targetRecord.cardInstanceId, isOwnAction);
+    }
   }
 
   return action as unknown as GameAction;
@@ -971,6 +974,17 @@ export default function MatchPage() {
       commitPlay(cardInstanceId, slotIndex);
     }, PLAY_COMMIT_DELAY_MS);
   }, [addUiLog, clearPendingPlay, commitPlay, interactionLocked, recordDebug]);
+
+  const playCardWithHandTarget = useCallback((cardInstanceId: string, targetCardInstanceId: string) => {
+    if (interactionLocked) return addUiLog("Дождитесь завершения экранного события.");
+    void submitGameAction({
+      type: "PLAY_CARD",
+      playerId: "player",
+      cardInstanceId,
+      target: { type: "hand", playerId: "player", cardInstanceId: targetCardInstanceId },
+    });
+    setSelectedCardId(null);
+  }, [addUiLog, interactionLocked, submitGameAction]);
 
   const handlePlayBlindTopCard = useCallback(() => {
     if (interactionLocked) {
@@ -1615,6 +1629,7 @@ export default function MatchPage() {
         onSelectCard={setSelectedCardId}
         onRoll={handleRoll}
         onPlay={playCard}
+        onPlayHandTarget={playCardWithHandTarget}
         onPlayTopCard={handlePlayBlindTopCard}
         onInvalidDrop={handleInvalidDrop}
         logEntries={mergedLog}

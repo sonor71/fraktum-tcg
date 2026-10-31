@@ -7,6 +7,7 @@ type BoardSlotProps = {
   index: number;
   valid?: boolean;
   onActivate?: (index: number) => void;
+  targetable?: boolean;
 };
 
 function safeNumber(value: unknown, fallback = 0) {
@@ -76,7 +77,7 @@ function getSlotState(card: CardInstance | null, canDrop: boolean) {
   return "locked";
 }
 
-export function BoardSlot({ card, side, index, valid = false, onActivate }: BoardSlotProps) {
+export function BoardSlot({ card, side, index, valid = false, onActivate, targetable = false }: BoardSlotProps) {
   const isPlayerSlot = side === "player";
   const occupied = Boolean(card);
   const canDrop = isPlayerSlot && !occupied && valid;
@@ -89,7 +90,7 @@ export function BoardSlot({ card, side, index, valid = false, onActivate }: Boar
     "matchBoardSlot",
     `is-${side}`,
     occupied ? "is-occupied" : "is-empty",
-    canDrop ? "is-valid is-drop-open" : "",
+    canDrop || targetable ? "is-valid is-drop-open" : "",
     !occupied && isPlayerSlot && !canDrop ? "is-drop-locked" : "",
     temporary ? "is-temporary" : "",
     card && hp.hasHp ? "has-hp-card" : "",
@@ -108,7 +109,7 @@ export function BoardSlot({ card, side, index, valid = false, onActivate }: Boar
       data-slot-state={getSlotState(card, canDrop)}
       data-card-kind={cardKind}
       data-card-id={card?.instanceId ?? ""}
-      onClick={() => { if (canDrop) onActivate?.(index); }}
+      onClick={() => { if (canDrop || targetable) onActivate?.(index); }}
     >
       <span className="matchSlotRune" aria-hidden="true">✦</span>
       <span className="matchSlotDropHitbox" aria-hidden="true" />
