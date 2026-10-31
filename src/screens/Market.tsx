@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import TiltCard from "../components/TiltCard";
+import { matchesMarketCardSearch } from "../game/marketCatalog";
 import {
   AUCTION_HOUSE_FEE_RATE,
   CARDS,
@@ -238,7 +239,7 @@ export default function Market() {
   }, [processAuctionMarket]);
 
   const catalogOffers = useMemo(() => {
-    const query = buySearch.trim().toLowerCase();
+    const query = buySearch.trim();
     const editions: CardEdition[] = buyEditionFilter === "all"
       ? ["serial", "foil_serial"]
       : [buyEditionFilter];
@@ -253,8 +254,7 @@ export default function Market() {
       })),
     )
       .filter((offer) => {
-        const searchable = `${offer.definition.title} ${offer.definition.id} ${offer.definition.collection}`.toLowerCase();
-        if (query && !searchable.includes(query)) return false;
+        if (!matchesMarketCardSearch(offer.definition, query)) return false;
         if (buyRarityFilter !== "all" && offer.definition.rarity !== buyRarityFilter) return false;
         return true;
       })
@@ -463,7 +463,7 @@ export default function Market() {
                         <CardArtwork card={offer.preview} className="marketGridTilt" />
                         {offer.edition === "foil_serial" ? <span className="marketFoilBadge">FOIL</span> : null}
                       </div>
-                      <strong>{offer.definition.title}</strong>
+                      <strong title={offer.definition.title}>{offer.definition.ruTitle || offer.definition.title}</strong>
                       <span>{offer.edition === "foil_serial" ? "Foil Serial" : "Serial"}</span>
                       <small>{RARITY_LABELS[offer.definition.rarity]} · {formatPremium(offer.price)}</small>
                     </button>
@@ -488,7 +488,7 @@ export default function Market() {
                 <div className="marketSelectedCard">
                   <CardArtwork card={selectedOffer.preview} className="marketPreviewTilt" />
                   <div>
-                    <strong>{selectedOffer.definition.title}</strong>
+                    <strong>{selectedOffer.definition.ruTitle || selectedOffer.definition.title}</strong>
                     <span>{selectedOffer.definition.collection}</span>
                     <small>{selectedOffer.edition === "foil_serial" ? "Foil Serial" : "Serial"} · {RARITY_LABELS[selectedOffer.definition.rarity]}</small>
                   </div>
