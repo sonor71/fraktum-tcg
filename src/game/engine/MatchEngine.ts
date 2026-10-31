@@ -21,6 +21,7 @@ import {
   cardRequiresBoardSlot,
   getCardBoardMaxHp,
   getCardCost,
+  getCardCurrentHp,
   getEffectiveCardCost,
   getCardTitle,
   getRequestedOrFreeSlotIndex,
@@ -297,8 +298,16 @@ export function effectAmount(effect: Record<string, unknown>, fallback = 0) {
 }
 
 function dealDirectHeroDamage(state: MatchState, playerId: PlayerId, damage: number, source: string): MatchState {
-  const amount = Math.max(0, Math.floor(damage));
+  let amount = Math.max(0, Math.floor(damage));
   if (amount <= 0) return state;
+
+  const protectionKey = `${state.activePlayerId}:${state.turn}:${state[state.activePlayerId].personalTurnsTaken ?? 0}`;
+  const primeActive = state.board[slotsKey(playerId)].some((card) =>
+    (card?.baseId === "prime" || card?.definition.id === "prime") && getCardCurrentHp(card) > 0,
+  );
+  const primeCanProtect = primeActive && state.primeProtectionUsed?.[playerId] !== protectionKey;
+  const blocked = primeCanProtect ? Math.min(2, amount) : 0;
+  amount -= blocked;
 
   const side = state[playerId];
   const before = Math.max(0, Number(side.hp ?? 0));
@@ -307,13 +316,16 @@ function dealDirectHeroDamage(state: MatchState, playerId: PlayerId, damage: num
   return log(
     {
       ...state,
+      primeProtectionUsed: primeCanProtect
+        ? { ...state.primeProtectionUsed, [playerId]: protectionKey }
+        : state.primeProtectionUsed,
       [playerId]: {
         ...side,
         hp: after,
         lastTurnLostHp: Math.max(0, Number(side.lastTurnLostHp ?? 0)) + Math.max(0, before - after),
       },
     },
-    `[DMG] ${source} dealt ${amount} damage to ${playerLabel(playerId)}.`,
+    `[DMG] ${source} dealt ${amount} damage to ${playerLabel(playerId)}${blocked > 0 ? ` after Prime blocked ${blocked}` : ""}.`,
   );
 }
 
@@ -354,6 +366,17 @@ function triggerTurnStartEffects(state: MatchState, playerId: PlayerId): MatchSt
   for (const effect of effects) {
     const id = normalizeEffectId(effect.id);
     const source = String(effect.source ?? "effect");
+
+    if (id === "hero_silhouette_next_will") {
+      const activatesAt = safeInteger(effect.activatesAtPersonalTurn, Number.MAX_SAFE_INTEGER);
+      if ((next[playerId].personalTurnsTaken ?? 0) >= activatesAt) {
+        const side = next[playerId];
+        const will = Math.min(side.maxWill, side.will + effectAmount(effect, 1));
+        next = setSideEffects({ ...next, [playerId]: { ...side, will } }, playerId, getSideEffects(next, playerId).filter((candidate) => candidate !== effect));
+        next = log(next, `${source} granted ${playerLabel(playerId)} +${will - side.will} Will.`);
+      }
+      continue;
+    }
 
     if (id === "psychological_disorder") {
       const roll = rollDie(next.rngSeed, 2);
@@ -871,6 +894,18 @@ export function playCard(
   const card = handCard ?? discardCard ?? enemyDeckCard;
 
   if (!card) return log(state, "Card is not available from hand, discard, or the opponent deck.");
+
+  const cardId = card.baseId || card.definition.id;
+  if (cardId === "healing") {
+    if (target?.type !== "slot" || target.playerId !== playerId || typeof target.slotIndex !== "number" || !playBlock.state.board[slotsKey(playerId)][target.slotIndex]) {
+      return log(state, "Healing requires a friendly card on the field.");
+    }
+  }
+  if (cardId === "clean_sheet") {
+    if (target?.type !== "hand" || target.playerId !== playerId || target.cardInstanceId === card.instanceId || !side.hand.some((candidate) => candidate.instanceId === target.cardInstanceId)) {
+      return log(state, "Clean Sheet requires another selected card in your hand.");
+    }
+  }
 
   const turnState = playBlock.state.currentTurn ?? { playerId, d20Limit: "unlimited" as const, playsUsed: 0, cardsPlayed: 0, destroyedOwnCard: false, freeCards: false, skipDamageApplied: false, timerSeconds: BASE_TURN_SECONDS, playedCosts: [] };
   if (turnState.d20Limit !== "unlimited" && turnState.playsUsed >= turnState.d20Limit) return log(state, "D20 play limit has been reached.");

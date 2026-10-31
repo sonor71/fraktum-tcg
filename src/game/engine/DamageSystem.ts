@@ -1,6 +1,6 @@
 import type { CardInstance, MatchState, PlayerId, PlayerState } from "../core/types";
 import { BOARD_SIZE } from "./Rules";
-import { getCardBoardMaxHp, getCardTitle, otherPlayer, slotsKey } from "./TurnManager";
+import { getCardBoardMaxHp, getCardCurrentHp, getCardTitle, otherPlayer, slotsKey } from "./TurnManager";
 
 const LOG_LIMIT = 80;
 
@@ -11,6 +11,22 @@ export function damageHero(player: PlayerState, raw: number) {
   return { player: { ...player, shield: Math.max(0, player.shield - amount), hp: Math.max(0, player.hp - dealt), lastTurnLostHp: player.lastTurnLostHp + dealt }, dealt };
 }
 export function healHero(player: PlayerState, amount: number) { return { ...player, hp: Math.min(player.maxHp, player.hp + Math.max(0, Math.floor(amount))) }; }
+
+function applyPrimeProtection(state: MatchState, playerId: PlayerId, rawDamage: number) {
+  const key = `${state.activePlayerId}:${state.turn}:${state[state.activePlayerId].personalTurnsTaken ?? 0}`;
+  const active = state.board[slotsKey(playerId)].some((card) =>
+    (card?.baseId === "prime" || card?.definition.id === "prime") && getCardCurrentHp(card) > 0,
+  );
+  if (!active || state.primeProtectionUsed?.[playerId] === key || rawDamage <= 0) {
+    return { state, damage: rawDamage, blocked: 0 };
+  }
+  const blocked = Math.min(2, rawDamage);
+  return {
+    state: { ...state, primeProtectionUsed: { ...state.primeProtectionUsed, [playerId]: key } },
+    damage: rawDamage - blocked,
+    blocked,
+  };
+}
 
 function attackValue(card: CardInstance | null) { return Math.max(0, Math.floor(Number(card?.currentAttack ?? card?.definition.attack ?? 0))); }
 function canAttack(card: CardInstance | null, ownerPersonalTurnsTaken: number, ownerId: PlayerId, activeAttackerId: PlayerId) {
@@ -107,12 +123,19 @@ export function resolveFieldCombat(state: MatchState, attackerId: PlayerId): Mat
     }
   }
 
-  const attackerDamage = damageHero(state[attackerId], attackerHeroDamage).player;
-  const defenderDamage = damageHero(state[defenderId], defenderHeroDamage).player;
+  let protectedState: MatchState = { ...state, board: { ...state.board, [attackerKey]: attackerSlots, [defenderKey]: defenderSlots } };
+  const attackerProtection = applyPrimeProtection(protectedState, attackerId, attackerHeroDamage);
+  protectedState = attackerProtection.state;
+  const defenderProtection = applyPrimeProtection(protectedState, defenderId, defenderHeroDamage);
+  protectedState = defenderProtection.state;
+  const attackerDamage = damageHero(protectedState[attackerId], attackerProtection.damage).player;
+  const defenderDamage = damageHero(protectedState[defenderId], defenderProtection.damage).player;
+  if (attackerProtection.blocked > 0) logLines.push(`[PRIME_PROTECTED] ${attackerId} hero damage reduced by ${attackerProtection.blocked}.`);
+  if (defenderProtection.blocked > 0) logLines.push(`[PRIME_PROTECTED] ${defenderId} hero damage reduced by ${defenderProtection.blocked}.`);
   logLines.push(`[FIELD_COMBAT_COMPLETED] Active: ${attackerId}; ${attackerId} hero damage: ${attackerHeroDamage}; ${defenderId} hero damage: ${defenderHeroDamage}.`);
 
   return {
-    ...state,
+    ...protectedState,
     [attackerId]: attackerDamage,
     [defenderId]: defenderDamage,
     board: { ...state.board, [attackerKey]: attackerSlots, [defenderKey]: defenderSlots },
