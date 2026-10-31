@@ -11,6 +11,87 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Keep startup failures readable even when the React bundle crashes before mounting.
+      (() => {
+        const startupErrors = [];
+        let displayed = false;
+
+        function showFailure() {
+          const root = document.getElementById("root");
+          if (!root || root.childElementCount > 0 || displayed) return;
+          displayed = true;
+
+          const panel = document.createElement("section");
+          panel.setAttribute("role", "alert");
+          Object.assign(panel.style, {
+            boxSizing: "border-box",
+            maxWidth: "800px",
+            margin: "8vh auto",
+            padding: "28px",
+            color: "#f8f9ff",
+            background: "#161b2b",
+            border: "1px solid #536181",
+            borderRadius: "14px",
+            font: "16px/1.55 system-ui, sans-serif",
+          });
+
+          const title = document.createElement("h1");
+          title.textContent = "FRAKTUM TCG — ошибка запуска";
+          title.style.margin = "0 0 14px";
+          panel.append(title);
+
+          const info = document.createElement("p");
+          info.textContent = "Сервер доступен, но интерфейс игры не загрузился. Передай разработчику текст ошибки ниже.";
+          panel.append(info);
+
+          const details = document.createElement("pre");
+          details.textContent = startupErrors.join("\n").slice(0, 1500) || "Нет ошибки JavaScript. Проверь вкладки Console и Network (F12).";
+          Object.assign(details.style, {
+            padding: "12px",
+            whiteSpace: "pre-wrap",
+            overflowWrap: "anywhere",
+            background: "#0a0d17",
+            borderRadius: "8px",
+            font: "13px/1.5 ui-monospace, monospace",
+          });
+          panel.append(details);
+
+          const reload = document.createElement("button");
+          reload.textContent = "Перезагрузить";
+          reload.type = "button";
+          reload.onclick = () => window.location.reload();
+          Object.assign(reload.style, {
+            padding: "10px 16px",
+            cursor: "pointer",
+            borderRadius: "8px",
+            background: "#e7be74",
+            color: "#141414",
+            border: "0",
+          });
+          panel.append(reload);
+          root.append(panel);
+        }
+
+        window.addEventListener("error", (event) => {
+          const target = event.target;
+          const isResource = target instanceof HTMLElement && target !== window;
+          const detail = isResource
+            ? "Не загрузился ресурс: " + (target.getAttribute("src") || target.getAttribute("href") || target.tagName)
+            : (event.message || "Неизвестная ошибка JavaScript") + (event.filename ? " (" + event.filename.split("/").pop() + ":" + event.lineno + ")" : "");
+          startupErrors.push(detail);
+          setTimeout(showFailure, 0);
+        }, true);
+
+        window.addEventListener("unhandledrejection", (event) => {
+          const reason = event.reason;
+          startupErrors.push("Необработанная ошибка: " + (reason && reason.message ? reason.message : String(reason)));
+          setTimeout(showFailure, 0);
+        });
+
+        setTimeout(showFailure, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -3,17 +3,36 @@ import { createClient, type Session, type SupabaseClient, type User } from "@sup
 const DEFAULT_SUPABASE_URL = "https://bvnbqjhgnlvthkluddfj.supabase.co";
 const DEFAULT_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_s2R7vW5VSbr86iCWYnRAgA_hgAvpscz";
 
-const RAW_SUPABASE_URL =
-  (import.meta.env.VITE_SUPABASE_URL as string | undefined) || DEFAULT_SUPABASE_URL;
+const ENV_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const SUPABASE_ANON_KEY =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || DEFAULT_SUPABASE_PUBLISHABLE_KEY;
 
-function normalizeSupabaseUrl(value: string | undefined) {
+/**
+ * Vercel may supply a placeholder or malformed VITE_SUPABASE_URL.
+ * Reject it before createClient() executes at module import time: otherwise
+ * every page crashes before React can render the main menu.
+ */
+function normalizeSupabaseUrl(value: string | undefined): string | undefined {
   const normalized = value?.trim().replace(/\/rest\/v1\/?$/i, "").replace(/\/+$/, "");
-  return normalized || undefined;
+  if (!normalized) return undefined;
+
+  try {
+    const parsed = new URL(normalized);
+    if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || !parsed.hostname) {
+      return undefined;
+    }
+    return normalized;
+  } catch {
+    return undefined;
+  }
 }
 
-const SUPABASE_URL = normalizeSupabaseUrl(RAW_SUPABASE_URL);
+const validEnvSupabaseUrl = normalizeSupabaseUrl(ENV_SUPABASE_URL);
+if (ENV_SUPABASE_URL && !validEnvSupabaseUrl) {
+  console.warn("[FRAKTUM] Invalid VITE_SUPABASE_URL; falling back to configured project URL.");
+}
+
+const SUPABASE_URL = validEnvSupabaseUrl ?? DEFAULT_SUPABASE_URL;
 
 export type FraktumSupabaseClient = SupabaseClient;
 export type FraktumCloudUser = User;
